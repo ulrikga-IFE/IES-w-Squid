@@ -7,16 +7,19 @@ import ctypes
 import matplotlib.pyplot as plt
 from PySide6.QtWidgets import QApplication
 import qasync
+import time
 import sys
 import asyncio
+import os
+from datetime import datetime
+import multiprocessing
 
 
 import measurements
+import watch_impedance_V2
 
 class GUI():
     def __init__(self) -> None:
-        self.app = QApplication(sys.argv)
-
         self.root = tk.Tk()                             # Create main window
         self.root.geometry('1280x720')
         self.root.minsize(1800,900)                     # Makes the minimum size of the window equal to the initial size
@@ -62,31 +65,25 @@ class GUI():
                 chosen = tk.Label(self.root,text=chosen_channels[0:-1])
                 chosen.grid(row=2+picoscope_index,column=2, sticky='nsew')
         else:                                   # If more than or equal to 10 channels, the screen is to small so instead make button to show as pop up-window
-            chosen_channels_btn = tk.Button(self.root,text="Show chosen channels",command=lambda:self.show_chosen_channels(chosen_channels))
+            chosen_channels_btn = tk.Button(self.root,text="Show chosen channels",command=lambda: self.show_chosen_channels(chosen_channels))
             chosen_channels_btn.grid(row=2,column=2, sticky='nsew')
 
         self.messagebox = tk.Text(self.root)
         self.messagebox.grid(row=1,column=4,rowspan=num_picoscopes+14,columnspan=20, sticky='nsew')
+        
+        self.start_equip_btn = tk.Button(self.root,text="Start measurements",command=lambda: self.start_measurements(num_picoscopes, channels))
+        self.start_equip_btn.grid(row=num_picoscopes+15,column=20, sticky='nsew')
 
         self.full = False
         fullscreen_btn = tk.Button(self.root,text="Fullscreen",command=self.fullscrn)
         fullscreen_btn.grid(row=num_picoscopes+15,column=21, sticky='nsew')
-        
-        #self.setup_equip_btn = tk.Button(self.root,text="Connect to devices",command=None)
-        #self.setup_equip_btn.grid(row=num_picoscopes+15,column=22, sticky='nsew')
 
         quit_btn = tk.Button(self.root,text="Exit window",command=self.destroy)
-        quit_btn.grid(row=num_picoscopes+15,column=23, sticky='nsew')
-
-        # The time counter does not work right now
-        time_counter_label = tk.Label(self.root,text="Time left of measurement [s]:")
-        time_counter_label.grid(row=num_picoscopes+17,column=20, sticky='nsew')
-        self.time_counter = tk.Text(self.root,height=1,width=15)
-        self.time_counter.grid(row=num_picoscopes+17,column=21, sticky='nsew')
+        quit_btn.grid(row=num_picoscopes+15,column=22, sticky='nsew')
 
         # Button that open the dashboard_for_plotting_and_fitting-window. 
-        #open_db_for_plotting_and_fitting_btn = tk.Button(self.root, text="Open dashboard for plotting and fitting", bg='sky blue', command=None)
-        #open_db_for_plotting_and_fitting_btn.grid(row=num_picoscopes+19, rowspan=2, column=20, columnspan=4 ,sticky='nsew')
+        open_db_for_plotting_and_fitting_btn = tk.Button(self.root, text="Open dashboard for plotting and fitting", bg='sky blue', command=None)
+        open_db_for_plotting_and_fitting_btn.grid(row=num_picoscopes+19, rowspan=2, column=20, columnspan=4 ,sticky='nsew')
         
         par_label = tk.Label(self.root,text="Parameters:")
         par_label.grid(row=num_picoscopes+3,column=1, sticky='nsew')
@@ -96,11 +93,11 @@ class GUI():
         ps_par_label = tk.Label(self.root,text="Parameters for Picoscopes:")
         ps_par_label.grid(row=num_picoscopes+4,column=1, sticky='nsew')
 
-        totaltime_label = tk.Label(self.root,text="Total picoscope time (s):")
-        totaltime_label.grid(row=num_picoscopes+5,column=1, sticky='nsew') 
-        self.totaltime = tk.Entry(self.root)
-        self.totaltime.grid(row=num_picoscopes+5,column=2, sticky='nsew')  
-        self.totaltime.insert(0,"120")                                                  # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
+        periods_label = tk.Label(self.root,text="Total periods:")
+        periods_label.grid(row=num_picoscopes+5,column=1, sticky='nsew') 
+        self.periods = tk.Entry(self.root)
+        self.periods.grid(row=num_picoscopes+5,column=2, sticky='nsew')  
+        self.periods.insert(0,"100")                                                  # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
         maximumsamplingfreq_label = tk.Label(self.root,text="Maximum frequency sampled (Hz):")
         maximumsamplingfreq_label.grid(row=num_picoscopes+6,column=1, sticky='nsew') 
         self.maximumsamplingfreq = tk.Entry(self.root)
@@ -111,19 +108,19 @@ class GUI():
         max_pot_current_channel_label.grid(row=num_picoscopes+7,column=1, sticky='nsew')
         self.max_pot_current_channel = tk.Entry(self.root)
         self.max_pot_current_channel.grid(row=num_picoscopes+7,column=2, sticky='nsew')
-        self.max_pot_current_channel.insert(0,"10")     
+        self.max_pot_current_channel.insert(0,"20")     
                                                     # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
         max_pot_stack_voltage_channel_label = tk.Label(self.root,text="Max stack potential [V]:")
         max_pot_stack_voltage_channel_label.grid(row=num_picoscopes+8,column=1, sticky='nsew')
         self.max_pot_stack_voltage_channel = tk.Entry(self.root)
         self.max_pot_stack_voltage_channel.grid(row=num_picoscopes+8,column=2, sticky='nsew')
-        self.max_pot_stack_voltage_channel.insert(0,"10") # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
+        self.max_pot_stack_voltage_channel.insert(0,"20") # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
 
         max_pot_cell_voltage_channel_label = tk.Label(self.root,text="Max cell potential [V]:")
         max_pot_cell_voltage_channel_label.grid(row=num_picoscopes+9,column=1, sticky='nsew')
         self.max_pot_cell_voltage_channel = tk.Entry(self.root)
         self.max_pot_cell_voltage_channel.grid(row=num_picoscopes+9,column=2, sticky='nsew')
-        self.max_pot_cell_voltage_channel.insert(0,"10")                                            # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
+        self.max_pot_cell_voltage_channel.insert(0,"20")                                            # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
 
         experimental_description_label = tk.Label(self.root,text="Description of experiment:")
         experimental_description_label.grid(row=num_picoscopes+10,column=1, sticky='nsew')
@@ -210,9 +207,6 @@ class GUI():
         self.TEXTBOX_FONTSIZE = self.textbox_font.configure()["size"]
         self.TEXTBOX_FAMILY = self.textbox_font.configure()["family"]
 
-        self.start_equip_btn = tk.Button(self.root,text="Start measurements",command=lambda: self.start_measurements(num_picoscopes, channels))
-        self.start_equip_btn.grid(row=num_picoscopes+15,column=20, sticky='nsew')
-
         self.root.mainloop()
 
     def how_to(self):
@@ -243,6 +237,134 @@ class GUI():
     
     def show_chosen_channels(self, chosen_channels=""):
         tk.messagebox.showinfo("Chosen channels:",chosen_channels,parent=self.root)
+
+    def collect_parameters(self):
+        '''
+        Initializes the parameters into the corresponding arrays,
+        finds the corresponding voltage ranges, calculates the total
+        time for the potentiostat and picoscope, so that these can
+        be matched.
+        '''
+
+        def find_voltage_range(potential):
+            """
+            Parameters:
+            --------
+            - potential : str or float
+                The maximum potential expected to be measured on a channel
+
+            Does:
+            --------
+            Finds the corresponding settting for the picoscope unit so the 
+            potential range is as small as possible. This ensures maximum
+            resolution of the measurements.
+            """
+            potential = float(potential)
+            if potential > 10.01:           
+                range = 10                  # 10 = +-20V (See picoscope SDK documentation page 83)
+            elif potential > 5.01:
+                range = 9                   # 9 = +- 10V
+            elif potential > 1.01:
+                range = 8                   # 8 = +- 5V
+            elif potential > 0.501:
+                range = 7                   # 7 = +- 1V
+            elif potential > 0.201: 
+                range = 6                   # 6 = +- 0.5 V
+            elif potential > 0.101: 
+                range = 5                   # 5 = +- 200 mV
+            else: 
+                range = 4                   # 4 = +- 100 mV
+            return(range)
+    
+        current_range = find_voltage_range(self.max_pot_current_channel.get())
+        stack_potential_range = find_voltage_range(self.max_pot_stack_voltage_channel.get())
+        """NOTE: 1B and 5B were set to stack potential. Ask about this"""
+
+        cell_potential_range = find_voltage_range(self.max_pot_cell_voltage_channel.get())
+ 
+        self.parameters = { 
+                       'current': [float(1)],                                           # Initial current in [A]  self.voltage.get()
+                       'amplitude_current' : float(0.1),                                # Sinus amplitude in [A]  self.amp_voltage.get()
+                       'initial_frequency' : float(10000),                              # [Hz]      self.init_freq.get()
+                       'final_frequency' : float(1),                                    # [Hz]       self.final_freq.get()
+                       'frequency_number' : int(0),                                     # Number of frequencies          # (np.log10(final_freq) - np.log10(init_freq)) * 10, float(self.freq_num.get())
+                       'duration' : float(self.totaltime.get()),                        # Duration in [s]  self.duration.get()
+                       #I added these in order to pull data for the file formatting, do I need those above?
+                       "max_potential_channel" : str(self.max_pot_current_channel.get()),
+                       "max_potential_stack" : str(self.max_pot_stack_voltage_channel.get()),
+                       "max_potential_cell" : str(self.max_pot_cell_voltage_channel.get()),
+                       "cell_numbers" : str(self.cell_numbers.get()),
+                       "area" : str(self.area.get()),
+                       "temperature" : str(self.temperature.get()),
+                       "pressure" : str(self.pressure.get()),
+                       "DC_current" : str(self.dc_current.get()),
+                       "AC_current" : str(self.ac_current.get()),
+                       "shunt" : str(self.shunt_value.get())
+                       }
+        self.constants = {
+                          "timeIntervalns" : ctypes.c_float(),
+                          "returnedMaxSamples" : ctypes.c_int32(),
+                          "overflow" : ctypes.c_int16(),                                # create overflow location
+                          "maxADC" : ctypes.c_int16(32767),                             # find maximum ADC count value
+                          "currentRange" : int(float(current_range)),
+                          "stackPotentialRange" : int(float(stack_potential_range)),
+                          "cellPotentialRange" : int(float(cell_potential_range)),
+                          }
+        self.constants["maxSamples"] = self.constants["preTriggerSamples"] + self.constants["postTriggerSamples"]
+        self.constants["cmaxSamples"] = ctypes.c_int32(self.constants["maxSamples"])    # create converted type maxSamples
+
+        match self.parameters["shunt"]:
+            case "200mA/200mV":
+                self.resistor_value = 1
+            case "2A/200mV":
+                self.resistor_value = 0.134                 # Modified from experimental measurement 30.11.2022 - Based on connection on large pins
+            case "5A/50mV":
+                self.resistor_value = 0.01
+            case "25A/60mV":
+                self.resistor_value = 0.0024
+            case "100A/60mV":
+                self.resistor_value = 0.0006
+            case "200A/60mV":
+                self.resistor_value = 0.0003
+            case "Custom":
+                self.resistor_value = tk.simpledialog.askfloat("Resistor value in Ohm", "You have selected a custom shunt, please give the resistance value in ohm.",
+                                parent=self.root)
+        
+        self.submit_btn.config(bg="#00ff00")
+
+    def start_measurements(self, num_picoscopes, channels):
+        self.collect_parameters()
+
+        periods = float(self.periods.get())
+        frequencies_used = str(self.frequencies_selected.get()).split(",")
+        range_of_freqs = []
+        for frequency in frequencies_used:
+            range_of_freqs.append(float(frequency))
+
+        bias = float(self.dc_current.get())
+        amplitude = bias * float(self.ac_current.get())
+
+        date_today = datetime.today().strftime("%Y-%m-%d-")
+        time_now = datetime.now().strftime("%H%M-%S")
+        time_path = date_today + time_now
+        save_path = f"Raw_data\\{time_path}"
+        processing_path = f"Data_for_processing\\{time_path}"
+    
+        do_experiment = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to proceed with experiment?")
+        
+        if do_experiment:
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            if not os.path.exists(processing_path):
+                os.makedirs(processing_path)
+            gathering = multiprocessing.Process(target= self.do_experiment, args = (num_picoscopes, channels, periods, range_of_freqs, bias, amplitude, self.constants, self.parameters, time_path))
+            gathering.start()
+            
+            do_process_data = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to process the data when the measurements are done?")
+            if do_process_data:
+               self.process_data(num_picoscopes, channels, self.resistor_value, len(range_of_freqs), time_path)
+            gathering.join()
+            self.log("Finished processing")
 
     def fullscrn(self):
         '''
@@ -290,120 +412,59 @@ class GUI():
         self.messagebox.see(tk.END)
         self.root.update()
 
-    def collect_parameters(self):
-        '''
-        Initializes the parameters into the corresponding arrays,
-        finds the corresponding voltage ranges, calculates the total
-        time for the potentiostat and picoscope, so that these can
-        be matched.
-        '''
+    @staticmethod
+    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path):
+        app = QApplication(sys.argv)
+        loop = qasync.QEventLoop(app)
+        asyncio.set_event_loop(loop)
+        measurer = measurements.Measurer(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path)
 
-        def find_voltage_range(potential):
-            """
-            Parameters:
-            --------
-            - potential : str or float
-                The maximum potential expected to be measured on a channel
+        with loop:
+            loop.run_until_complete(measurer.measure())
+        app.quit()
 
-            Does:
-            --------
-            Finds the corresponding settting for the picoscope unit so the 
-            potential range is as small as possible. This ensures maximum
-            resolution of the measurements.
-            """
-            potential = float(potential)
-            if potential > 10.01:           
-                range = 10                  # 10 = +-20V (See picoscope SDK documentation page 83)
-            elif potential > 5.01:
-                range = 9                   # 9 = +- 10V
-            elif potential > 1.01:
-                range = 8                   # 8 = +- 5V
-            elif potential > 0.501:
-                range = 7                   # 7 = +- 1V
-            elif potential > 0.201: 
-                range = 6                   # 6 = +- 0.5 V
-            elif potential > 0.101: 
-                range = 5                   # 5 = +- 200 mV
-            else: 
-                range = 4                   # 4 = +- 100 mV
-            return(range)
-        
-        current_range = find_voltage_range(self.max_pot_current_channel.get())
-        stack_potential_range = find_voltage_range(self.max_pot_stack_voltage_channel.get())
-        """NOTE: 1B and 5B were set to stack potential. Ask about this"""
+    def process_data(num_picoscopes, channels, resistor_value, num_freqs, save_path):
+        counter = 0
+        for picoscope_index in range(num_picoscopes):
+            current_channel = counter + 1
+            counter += 1
+            voltage_channels_watch_imp = str(current_channel + 1)     #Has to have a channel that is the next, so with this, 
+                                                                                #it is not really allowed to use for example channel A and C, but only A and B if two channels.
+            counter += 1
+            for channel_index in range(1,3,1):
+                if channels[picoscope_index,channel_index]==1:
+                    add_string = ","+str(counter + 1)
+                    voltage_channels_watch_imp += add_string
+                    counter += 1
+            print("Voltage channels used: "+ voltage_channels_watch_imp)
+            watcher = watch_impedance_V2.Interface(current_channel, voltage_channels_watch_imp, resistor_value, num_freqs, save_path)
 
-        cell_potential_range = find_voltage_range(self.max_pot_cell_voltage_channel.get())
-        
-        pre_ts = 0
-        timebase = int(math.ceil(50000000/(3*float(self.maximumsamplingfreq.get()))+ 2))
+            time.sleep(5)
+            watcher.start_watch()
 
-        print("The timebase is: " + str(timebase))
-        post_ts = int(math.ceil(float(self.totaltime.get())/((timebase - 2)*20e-9)))
-        
-        print("The number of samples is: " + str(post_ts))
- 
-        self.parameters = { 
-                       'current': [float(1)],                                           # Initial current in [A]  self.voltage.get()
-                       'amplitude_current' : float(0.1),                                # Sinus amplitude in [A]  self.amp_voltage.get()
-                       'initial_frequency' : float(10000),                              # [Hz]      self.init_freq.get()
-                       'final_frequency' : float(1),                                    # [Hz]       self.final_freq.get()
-                       'frequency_number' : int(0),                                     # Number of frequencies          # (np.log10(final_freq) - np.log10(init_freq)) * 10, float(self.freq_num.get())
-                       'duration' : float(self.totaltime.get()),                        # Duration in [s]  self.duration.get()
-                       #I added these in order to pull data for the file formatting, do I need those above?
-                       "max_potential_channel" : str(self.max_pot_current_channel.get()),
-                       "max_potential_stack" : str(self.max_pot_stack_voltage_channel.get()),
-                       "max_potential_cell" : str(self.max_pot_cell_voltage_channel.get()),
-                       "cell_numbers" : str(self.cell_numbers.get()),
-                       "area" : str(self.area.get()),
-                       "temperature" : str(self.temperature.get()),
-                       "pressure" : str(self.pressure.get()),
-                       "DC_current" : str(self.dc_current.get()),
-                       "AC_current" : str(self.ac_current.get()),
-                       "shunt" : str(self.shunt_value.get())
-                       }
-        self.constants = {
-                          "preTriggerSamples" : int(float(0)),                                                                                                
-                          "postTriggerSamples" : int(float(post_ts)),                                                          
-                          "timebase" : int(float(timebase)),                                                                    
-                          "timeIntervalns" : ctypes.c_float(),
-                          "returnedMaxSamples" : ctypes.c_int32(),
-                          "overflow" : ctypes.c_int16(),                                # create overflow location
-                          "maxADC" : ctypes.c_int16(32767),                             # find maximum ADC count value
-                          "currentRange" : int(float(current_range)),
-                          "stackPotentialRange" : int(float(stack_potential_range)),
-                          "cellPotentialRange" : int(float(cell_potential_range)),
-                          }
-        self.constants["maxSamples"] = self.constants["preTriggerSamples"] + self.constants["postTriggerSamples"]
-        self.constants["cmaxSamples"] = ctypes.c_int32(self.constants["maxSamples"])    # create converted type maxSamples
+    def open_fitting():
+        #do nothing
+        print()
 
-        self.totaltimepicoscope = int((float(pre_ts)+float(post_ts))*20e-9*(float(timebase)-2))
-
-        self.submit_btn.config(bg="#00ff00")
-
-    def start_measurements(self, num_picoscopes, channels):
-        self.collect_parameters()
-
-        frequencies_used = str(self.frequencies_selected.get()).split(",")
-        range_of_freqs = []
-        for frequency in frequencies_used:
-            range_of_freqs.append(float(frequency))
-
-        bias = float(self.dc_current.get())
-        amplitude = bias * float(self.ac_current.get())
-
-        measurer = measurements.Measurer(self.log, num_picoscopes, channels, range_of_freqs, bias, amplitude, self.constants, self.parameters)
-        measurer.print_internal()
-
-        do_experiment = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to proceed with experiment?")
-        
-        if do_experiment:
-            loop = qasync.QEventLoop(self.app)
-            asyncio.set_event_loop(loop)
-            
-            with loop:
-                loop.run_until_complete(measurer.measure())
-
-            measurer.plot()
 
 if __name__ == "__main__":
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    folder_names = ['Save_folder', 'Total_mm', 'Raw_data', 'Data_for_processing', 'processed']
+    for folder_name in folder_names:
+        temp_folder_path = os.path.join(current_directory, folder_name)
+        if not os.path.exists(temp_folder_path):
+            try:
+                os.makedirs(temp_folder_path)
+                print(f"Folder '{folder_name}' created successfully in {current_directory}.")
+            except OSError as e:
+                print(f"Error occurred while creating folder '{folder_name}': {e}")
+        else:
+            print(f"Folder '{folder_name}' already exists in {current_directory}.")
+            
     GUI()
+
+"""Notes:
+- When multithreading, one cannot log to the main GUI window. 
+    -This is because only one thread can access the GUI at once, and in order to use watch_impedance, we need it to be in the main thread as it also opens a GUI window
+    -This means the other thread, the one doing the measurements, cannot have access to GUI beyond matplotlib
+"""
