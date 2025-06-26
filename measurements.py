@@ -132,10 +132,6 @@ class Measurer():
                     self.pico_ready.acquire()
                 handler.resumeExperiment(self.squid_channel)
                 
-                    
-                
-
-        
         task_p = asyncio.create_task(pico_task())
         task_a = asyncio.create_task(admiral_task())
 
@@ -149,7 +145,7 @@ class Measurer():
                                                         channel_index,
                                                         ctypes.byref(self.bufferMax[picoscope_index][channel_index]),
                                                         ctypes.byref(self.bufferMin[picoscope_index][channel_index]),
-                                                        self.constants["maxSamples"],
+                                                        samples,
                                                         0,
                                                         0)
                 assert_pico_ok(valid_buffers)

@@ -15,7 +15,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
-import circuit_handler as ch 
+import dependencies.circuit_handler as ch 
 
 
 class tkinter_class():

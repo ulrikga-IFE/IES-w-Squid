@@ -12,7 +12,7 @@ the results. For further specification see the class description.
 
 @author: Christoffer Askvik Faugstad (christoffer.askvik.faugstad@hotmail.com)
 """
-from GUI_helper import PlotCanvas
+from dependencies.GUI_helper import PlotCanvas
 import numpy as np
 from matplotlib.colors import LogNorm
 from numpy.fft import rfft, rfftfreq

@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sin, cos, pi
-import GP_DRT
+import dependencies.GP_DRT
 import pandas as pd
 from hyperopt import fmin, tpe, hp, Trials
 import warnings
@@ -71,7 +71,7 @@ def find_hyperparameters(Z_exp, xi_vec, interface, plot_hyp_par_space=False):
 
 
     def objective(theta):
-        return GP_DRT.NMLL_fct(theta, Z_exp, xi_vec)
+        return dependencies.GP_DRT.NMLL_fct(theta, Z_exp, xi_vec)
 
 
     space = [hp.uniform('sigma_n', sigma_n_start, sigma_n_end), 
@@ -221,15 +221,15 @@ def fit_DRT(Z_exp, freq_vec, data, interface, plotting = False):
     # calculate the matrices shown in eq (18)
     # K = GP_DRT.matrix_K(xi_vec, xi_vec, sigma_f, ell)
     # L_im_K = GP_DRT.matrix_L_im_K(xi_vec, xi_vec, sigma_f, ell)
-    L2_im_K = GP_DRT.matrix_L2_im_K(xi_vec, xi_vec, sigma_f, ell)
+    L2_im_K = dependencies.GP_DRT.matrix_L2_im_K(xi_vec, xi_vec, sigma_f, ell)
     Sigma = (sigma_n**2)*np.eye(N_freqs)
 
     # the matrix $\mathcal L^2_{\rm im} \mathbf K + \sigma_n^2 \mathbf I$ whose inverse is needed
     K_im_full = L2_im_K + Sigma
 
     # check if the K_im_full is positive definite, otherwise, a nearest one would replace the K_im_full
-    if not GP_DRT.is_PD(K_im_full):
-        K_im_full = GP_DRT.nearest_PD(K_im_full)
+    if not dependencies.GP_DRT.is_PD(K_im_full):
+        K_im_full = dependencies.GP_DRT.nearest_PD(K_im_full)
 
     # Cholesky factorization, L is a lower-triangular matrix
     L = np.linalg.cholesky(K_im_full)
@@ -263,11 +263,11 @@ def fit_DRT(Z_exp, freq_vec, data, interface, plotting = False):
 
         # compute matrices shown in eq (18), xi_star corresponds to a new point
         # k_star = GP_DRT.matrix_K(xi_vec, xi_star, sigma_f, ell)
-        L_im_k_star_up = GP_DRT.matrix_L_im_K(xi_star, xi_vec, sigma_f, ell)
-        L2_im_k_star = GP_DRT.matrix_L2_im_K(xi_vec, xi_star, sigma_f, ell)
-        k_star_star = GP_DRT.matrix_K(xi_star, xi_star, sigma_f, ell)
+        L_im_k_star_up = dependencies.GP_DRT.matrix_L_im_K(xi_star, xi_vec, sigma_f, ell)
+        L2_im_k_star = dependencies.GP_DRT.matrix_L2_im_K(xi_vec, xi_star, sigma_f, ell)
+        k_star_star = dependencies.GP_DRT.matrix_K(xi_star, xi_star, sigma_f, ell)
         # L_im_k_star_star = GP_DRT.matrix_L_im_K(xi_star, xi_star, sigma_f, ell)
-        L2_im_k_star_star = GP_DRT.matrix_L2_im_K(xi_star, xi_star, sigma_f, ell)
+        L2_im_k_star_star = dependencies.GP_DRT.matrix_L2_im_K(xi_star, xi_star, sigma_f, ell)
 
         # compute Z_im_star mean and standard deviation using eq (26)
         Z_im_vec_star[index] = np.dot(L2_im_k_star.T, np.dot(inv_K_im_full, Z_exp.imag))[0]

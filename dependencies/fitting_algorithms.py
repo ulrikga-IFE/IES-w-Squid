@@ -16,11 +16,12 @@ import pandas as pd         # For sorting file structure
 import time
 import numpy as np
 from datetime import datetime # For sorting dates
-from RR_GP_DRT import fit_DRT
+from dependencies.RR_GP_DRT import fit_DRT
+import dependencies.DRT_fitting
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-from tkinter_window import tkinter_class
+from dependencies.tkinter_window import tkinter_class
 
 
 
@@ -437,7 +438,7 @@ def predict_impedances(interface, df):
 
             try:
                 # Perform DRT
-                freq_vec_star, Z_re_vec_star, Z_im_vec_star, error_lower, error_upper = DRT_fitting.predict_impedance(
+                freq_vec_star, Z_re_vec_star, Z_im_vec_star, error_lower, error_upper = dependencies.DRT_fitting.predict_impedance(
                     interface, 
                     df.loc[(df["dir_name"] == dir_name) & (df['cell_name'] == cell_name), 'frequencies'].tolist(),
                     real_vals,

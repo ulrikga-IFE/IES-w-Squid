@@ -22,8 +22,8 @@ from bokeh.models import CustomJS
 import pandas as pd         # For sorting file structure
 from bokeh.plotting import output_file, save
 import dependencies.generate_bokeh as gb
-import circuit_handler as ch  
-from tkinter_window import tkinter_class
+import dependencies.circuit_handler as ch  
+from dependencies.tkinter_window import tkinter_class
 from dependencies.fitting_algorithms import retrieve_data, fit_with_circuit, fit_with_DRT, predict_impedances
 
 import time

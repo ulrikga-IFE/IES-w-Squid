@@ -37,13 +37,14 @@ Based on watch_impedance.py by Christoffer Askvik Faugstad (christoffer.askvik.f
 """
 import os
 from typing import Iterable
-import GUI_helper
+import dependencies.GUI_helper as GUI_helper
 import tkinter as tk
 from shutil import rmtree
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
-from eis_sample import EIS_Sample
+from dependencies.eis_sample import EIS_Sample
 import time
+
 
 # The class that handels the folder watching and trigers when a file is created
 class Watchdog(PatternMatchingEventHandler, Observer):
@@ -82,7 +83,7 @@ class Watchdog(PatternMatchingEventHandler, Observer):
 
 
 class Interface:
-    def __init__(self,current_channel,channels_from_main,resistor_value, num_freqs, save_path):
+    def __init__(self,current_channel,channels_from_main, resistor_value, num_freqs, save_path, is_last, save_final):
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
         the programs looping.
@@ -144,7 +145,11 @@ class Interface:
         self.files_processed = 0
 
         self.select_path(save_path)
-        self.select_save_path()
+        self.select_save_path(save_path)
+
+        self.save_time_string = save_path
+        self.is_last = is_last
+        self.save_final = save_final
 
     def make_canvases(self):
         """Creates the Canvases for the interface"""
@@ -418,8 +423,10 @@ class Interface:
             self.log("Watch stopped")
         else:
             self.log("Watch is already not running")
-
-        return 0
+        print("Stopped Watch")
+        if(self.is_last):
+            self.log("Processing complete")
+            self.save_final()
 
     def single_file(self):
         """
@@ -620,10 +627,10 @@ class Interface:
         if not os.path.exists(path):
             raise Exception(f"Cannot find {path}")
 
-    def select_save_path(self):
+    def select_save_path(self, save_path):
         """Helper function to select save folder/directory, called by Browse save button"""
         # Ask for save file folder/directory
-        path = "Save_folder"
+        path = f"Save_folder\\{save_path}"
         # If the path is not ""
         if path:
             # Store in object and log that it is selected

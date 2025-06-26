@@ -30,7 +30,7 @@ from tkinter import filedialog
 from shutil import rmtree
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
-from eis_sample import EIS_Sample
+from dependencies.eis_sample import EIS_Sample
 import time
 from bokeh.io import show, curdoc
 
