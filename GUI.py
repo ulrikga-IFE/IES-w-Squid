@@ -86,7 +86,7 @@ class GUI():
         quit_btn.grid(row=num_picoscopes+15,column=22, sticky='nsew')
 
         # Button that open the dashboard_for_plotting_and_fitting-window. 
-        open_db_for_plotting_and_fitting_btn = tk.Button(self.root, text="Open dashboard for plotting and fitting", bg='sky blue', command=None)
+        open_db_for_plotting_and_fitting_btn = tk.Button(self.root, text="Open dashboard for plotting and fitting", bg='sky blue', command=self.open_fitting)
         open_db_for_plotting_and_fitting_btn.grid(row=num_picoscopes+19, rowspan=2, column=20, columnspan=4 ,sticky='nsew')
         
         par_label = tk.Label(self.root,text="Parameters:")
@@ -97,11 +97,6 @@ class GUI():
         ps_par_label = tk.Label(self.root,text="Parameters for Picoscopes:")
         ps_par_label.grid(row=num_picoscopes+4,column=1, sticky='nsew')
 
-        periods_label = tk.Label(self.root,text="Total periods:")
-        periods_label.grid(row=num_picoscopes+5,column=1, sticky='nsew') 
-        self.periods = tk.Entry(self.root)
-        self.periods.grid(row=num_picoscopes+5,column=2, sticky='nsew')  
-        self.periods.insert(0,"100")                                                  # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
         maximumsamplingfreq_label = tk.Label(self.root,text="Maximum frequency sampled (Hz):")
         maximumsamplingfreq_label.grid(row=num_picoscopes+6,column=1, sticky='nsew') 
         self.maximumsamplingfreq = tk.Entry(self.root)
@@ -178,7 +173,7 @@ class GUI():
                 ]
 
         self.shunt_value = tk.StringVar(self.root)                                                 # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
-        self.shunt_value.set("200A/60mV")
+        self.shunt_value.set("200mA/200mV")
 
         dropmenu = tk.OptionMenu(self.root, self.shunt_value, *shunt_options)
         dropmenu.grid(row=num_picoscopes+17,column=2,sticky='nsew') 
@@ -188,7 +183,7 @@ class GUI():
         frequencies_selected_label.grid(row=num_picoscopes+19,column=1, sticky='nsew')
         self.frequencies_selected = tk.Entry(self.root)#,height=1,width=35)
         self.frequencies_selected.grid(row=num_picoscopes+20,column=1, columnspan = 4, sticky='nsew')     
-        self.frequencies_selected.insert(0,"1")
+        self.frequencies_selected.insert(0,"2000,1000,500,100,50,10,5,1")
 
         self.runwithoutpstat_button = tk.Label(self.root,text="Run without potentiostat:")
         self.runwithoutpstat_button.grid(row=num_picoscopes+21,column=1,sticky='nsew')
@@ -340,11 +335,12 @@ class GUI():
 
         self.collect_parameters()
 
-        periods = float(self.periods.get())
         frequencies_used = str(self.frequencies_selected.get()).split(",")
         range_of_freqs = []
         for frequency in frequencies_used:
             range_of_freqs.append(float(frequency))
+
+        self.frequencies_used = range_of_freqs
 
         bias = float(self.dc_current.get())
         amplitude = bias * float(self.ac_current.get())
@@ -366,20 +362,16 @@ class GUI():
             if not os.path.exists(processing_path):
                 os.makedirs(processing_path)
 
-            pool = Pool(processes=2)
-            pool.apply_async(self.do_experiment, [num_picoscopes, channels, periods, range_of_freqs, bias, amplitude, self.constants, self.parameters, time_path])
+            pool = Pool(processes=1)
+            pool.apply_async(self.do_experiment, [num_picoscopes, channels, range_of_freqs, bias, amplitude, self.constants, self.parameters, time_path])
 
-            do_process_data = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to process the data when the measurements are done?")
+            do_process_data = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to immediately process the measurements?")
             if do_process_data:
-               processed_path = f"Save_folder\\{time_path}"
-               if not os.path.exists(processed_path):
-                   os.makedirs(processed_path)
+                processed_path = f"Save_folder\\{time_path}"
+                if not os.path.exists(processed_path):
+                    os.makedirs(processed_path)
 
-            loop = asyncio.new_event_loop()
-            
-            loop.run_until_complete(self.process_data(num_picoscopes, channels, self.resistor_value, len(range_of_freqs), time_path))
-            
-            loop.close()
+                self.process_data(num_picoscopes, channels, self.resistor_value, len(range_of_freqs), time_path)
 
     def fullscrn(self):
         '''
@@ -428,11 +420,12 @@ class GUI():
         self.root.update()
 
     @staticmethod
-    def do_experiment(num_picoscopes, channels, periods, range_of_freqs, bias, amplitude, constants, parameters, time_path):
+    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path):
+
         app = QApplication(sys.argv)
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
-        measurer = measurements.Measurer(num_picoscopes, channels, periods, range_of_freqs, bias, amplitude, constants, parameters, time_path)
+        measurer = measurements.Measurer(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path)
 
         with loop:
             loop.run_until_complete(measurer.measure())
@@ -440,16 +433,14 @@ class GUI():
 
         measurer.plot()
 
-    async def process_data(self, num_picoscopes, channels, resistor_value, num_freqs, save_path):
+    def process_data(self, num_picoscopes, channels, resistor_value, num_freqs, save_path):
         counter = 0
-        processing_done = asyncio.Event()
         for picoscope_index in range(num_picoscopes):
             current_channel = counter + 1
-            counter += 1
             voltage_channels_watch_imp = str(current_channel + 1)     #Has to have a channel that is the next, so with this, 
                                                                                 #it is not really allowed to use for example channel A and C, but only A and B if two channels.
-            counter += 1
-            for channel_index in range(1,3,1):
+            counter += 2
+            for channel_index in range(2,4):
                 if channels[picoscope_index,channel_index]:
                     add_string = ","+str(counter + 1)
                     voltage_channels_watch_imp += add_string
@@ -469,29 +460,29 @@ class GUI():
         parent_dir = os.path.dirname(__file__)
         sub_path = os.path.join(parent_dir, "Total_mm")
         path = os.path.join(sub_path, self.save_time_string)
-        os.mkdir(path)
+        os.mkdir(path) 
 
         # Correctly identifies channels that are used for potential measurements, and not all channels
         for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(1,4):
+            for channel_index in range(4):
                 if(self.channels[picoscope_index][channel_index]):
                     make_file = False
                     for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
                         num = re.findall(r'\d+', filename)
                         #f = os.path.join("Save_folder",filename)
-                        if int(float(num[-1])) == picoscope_index:
+                        if int(float(num[-1])) == picoscope_index + channel_index + 1:
                             make_file=True
 
                     # If the channel is found, it will merge all files ending in the right integer into a single .mmfile. We want this corrected to sort in order from high to low.
                     if make_file == True:    
-                        fil = open(f"Total_mm\\{self.save_time_string}\\total_mmfile_{i}.mmfile", "w")
+                        fil = open(f"Total_mm\\{self.save_time_string}\\total_mmfile_{picoscope_index + channel_index + 1}.mmfile", "w")
 
                         fil.write("Frequency\tReal\tImaginary\n")
                         data_all = []
-                        for filename in os.listdir("Save_folder"):
+                        for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
                             num = re.findall(r'\d+', filename)
-                            f = os.path.join("Save_folder",filename)
-                            if int(float(num[-1])) == picoscope_index:
+                            f = os.path.join(f"Save_folder\\{self.save_time_string}",filename)
+                            if int(float(num[-1])) == picoscope_index + channel_index + 1:
                                 tiny_file = open(f,"r")
                                 lines = tiny_file.readlines()
                                 length = len(lines)
@@ -519,6 +510,7 @@ class GUI():
                             return amount
 
                         data_all.sort(key=my_sort)
+                        print(f"Data_all: {data_all}")
                         # We have a sorted dataset in data_all. Now we can test Kramer-Kronig on it
                         f_from_FFT = []
                         Z_values_from_FFT = []
@@ -534,24 +526,25 @@ class GUI():
                         Z_values_from_FFT = np.array(Z_values_from_FFT)
                         print("f_from_FFT is: " + str(f_from_FFT))
                         print("Z_values_from_FFT is: " + str(Z_values_from_FFT))
-
+                        """
                         M, mu, Z_linKK, res_real, res_imag = linKK(f_from_FFT, Z_values_from_FFT, c=.85, max_M=100, fit_type='complex', add_cap=False)
                         print("M value is :" + str(M))
                         print("mu value is :" + str(mu))
                         print("Z lin kk array is :" + str(Z_linKK))
                         print("res_real array is :" + str(res_real))
                         print("res_imag array is :" + str(res_imag))
-                        
-                        frequencies = np.array(self.freqs)
-                        for p in range(1,len(data_all)):
+                        """
+
+                        for p in range(len(data_all)):
                             line = data_all[p]
                             linesplit = float(line.split("\t")[0])
-                            for i in range(len(frequencies)):
-                                if abs((linesplit-float(frequencies[i]))/linesplit) < 0.01:
+                            for i in range(len(self.frequencies_used)):
+                                if abs((linesplit-float(self.frequencies_used[i]))/linesplit) < 0.01:
                             # Criteria for K-K, that the real residual is less than 10%. For now this function is basically turned off
                             #if abs(res_real[p-1]) < 1:
                                     fil.write(line)
                         fil.close()
+                        print(f"Made .mm file for pico: {picoscope_index} channel: {channel_index}")
             
         # Generate the Parameters.txt file that helps for plotting
         fil = open(f"Total_mm\\{self.save_time_string}\\Parameters.txt","w")
@@ -561,29 +554,30 @@ class GUI():
         fil.write(f"Date:\t{self.date_today}\n")
         fil.write(f"Time:\t{self.time_now}\n\n")
         cell_number = str(self.cell_numbers.get())
-        fil.write(f"Cell numbers:\t{cell_number}")
+        fil.write(f"Cell numbers:\t{cell_number}\n")
         area = str(self.area.get())
-        fil.write(f"Area:\t{area}")
+        fil.write(f"Area:\t{area}\n")
         temperature = str(self.temperature.get())
-        fil.write(f"Temperature:\t{temperature}")
+        fil.write(f"Temperature:\t{temperature}\n")
         pressure = str(self.pressure.get())
-        fil.write(f"Pressure:\t{pressure}")
+        fil.write(f"Pressure:\t{pressure}\n")
         dc_current = str(self.dc_current.get())
-        fil.write(f"DC current:\t{dc_current}")
+        fil.write(f"DC current:\t{dc_current}\n")
         ac_current = str(self.ac_current.get())
-        fil.write(f"AC current:\t{ac_current}")
+        fil.write(f"AC current:\t{ac_current}\n")
         fil.close()
 
         print(f"Done creating merged .mmfile after {time.time() - merge_start} s.\n")
         self.log(f"Done creating merged .mmfile after\n\t{(time.time() - merge_start):.2f} s.\n")
 
     def open_fitting(self):
+        self.log("Opening fitting window")
         fitting_dash.interface()
 
 
 if __name__ == "__main__":
     current_directory = os.path.dirname(os.path.abspath(__file__))
-    folder_names = ['Save_folder', 'Total_mm', 'Raw_data', 'Data_for_processing', 'processed']
+    folder_names = ['Save_folder', 'Total_mm', 'Raw_data', 'Data_for_processing']
     for folder_name in folder_names:
         temp_folder_path = os.path.join(current_directory, folder_name)
         if not os.path.exists(temp_folder_path):

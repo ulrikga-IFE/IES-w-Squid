@@ -167,9 +167,6 @@ class EIS_Sample:
         header = np.loadtxt(file_path, skiprows=1, max_rows=1, dtype=str)
         # Making a bool array with True if the unit is in milli-
         is_in_m = ["m" in name for name in header]
-        voltage_loc = voltage_loc - 1
-        print(f"Voltage location is: {voltage_loc}")
-        print(f"Is in m is: {is_in_m}")
         # Loading the data after skipping 3 rows
         data = np.loadtxt(file_path, skiprows=3)
         # Getting the different parts as seperate arrays and converting is in milli-
@@ -529,7 +526,6 @@ class EIS_Sample:
         """
 
         frequency_now = float(os.path.basename(file_path).split("freq")[1].split("Hz.txt")[0])
-
 
         sample = cls.from_file(
             file_path,

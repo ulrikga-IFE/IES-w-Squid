@@ -1,4 +1,0 @@
-Date:	2025-06-25-
-Time:	1500-42
-
-Cell numbers:	1,2,3,4,5,6,7,8,9,10Area:	195Temperature:	50Pressure:	0DC current:	1AC current:	0.4

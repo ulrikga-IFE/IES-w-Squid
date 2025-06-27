@@ -196,6 +196,7 @@ class interface():
         self.circuit_base_variables = []
         try:
             self.df= retrieve_data(self)        #
+            print(f"self.df: {self.df}")
         except:
             e = Exception("Unable to retrieve data from directory. Make sure you select a valid folder.")
             self.tw.log(e)

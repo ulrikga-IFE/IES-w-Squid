@@ -9,20 +9,18 @@ import numpy as np
 import time
 import threading
 import statistics
+import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter
 
 class Measurer():
-    def __init__(self, num_picoscopes, channels, periods, range_of_freqs, bias, amplitude, constants, parameters, save_path):
+    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, save_path):
         self.start_time = time.time()
-
-        #self.log = log
 
         self.num_picoscopes = num_picoscopes
         self.channels = channels
         self.squid_channel = 1
-        self.periods = periods
         self.range_of_freqs = range_of_freqs
         self.num_freqs = len(self.range_of_freqs)
         self.bias = bias
@@ -44,11 +42,9 @@ class Measurer():
 
         def device_connected_signal():
             print("Connection signal received")
-            #self.log("Connection signal received")
 
         def new_element_signal(stepnumber):
             print(f"Admiral ready to start {self.range_of_freqs[stepnumber-1]}Hz")
-            #self.log(f"Admiral ready to start {self.range_of_freqs[stepnumber-1]}Hz")
             handler.pauseExperiment(self.squid_channel)
 
         def element_paused():
@@ -61,16 +57,15 @@ class Measurer():
 
         def experiment_stopped():
             print(f"Experiment complete at {time.time() - self.start_time }")
-            #self.log(f"Experiment complete at {time.time() - self.start_time }")
     
         """
         admiral instruments setup      (not done in a pretty function because we need instances globally avaliable)
         """
+        print("Starting the measurment procedure")
         tracker = AisDeviceTracker.Instance()
         connection_status = tracker.connectToDeviceOnComPort("COM4")        #must manually write port
         if connection_status:
             print(f'Connection to Admiral instrument: {connection_status.message()}')
-            #self.log(f'Connection to Admiral instrument: {connection_status.message()}')
 
         handler = tracker.getInstrumentHandler("Cycler2151") 
         
@@ -83,22 +78,23 @@ class Measurer():
         #build experiment:
         experiment = AisExperiment()
 
-        for i in range(self.num_freqs):
-            freq = self.range_of_freqs[i]
+        for frequency_index in range(self.num_freqs):
+            freq = self.range_of_freqs[frequency_index]
             geisElement = AisEISGalvanostaticElement(freq, freq, 1, self.bias, self.amplitude)
-
-            geisElement.setMinimumCycles(int(self.periods + 2 * freq))
+            if freq > 10:
+                periods = freq 
+            else:
+                periods = 3 * freq 
+            print(f"Periods: {periods}")
+            geisElement.setMinimumCycles(int(periods + 4 * freq))
+    
             experiment.appendElement(geisElement, 1)
 
         uploading_status = handler.uploadExperimentToChannel(self.squid_channel,experiment)     #uploading the experiment onto a channel where it can be run
         if uploading_status:
             print(f"Uploading experiment to instrument: {uploading_status.message()}")
-            #self.log(f"Uploading experiment to instrument: {uploading_status.message()}")
             
         await self.pico_setup()     #sets up the picoscope
-
-
-        #almost ready, now we prepare the concurrent tasks
 
         async def pico_task():
             """
@@ -106,15 +102,14 @@ class Measurer():
             """
             
             for frequency_index in range(self.num_freqs):
+
                 freq = self.range_of_freqs[frequency_index]
 
-                #time.sleep(sample_time(self.periods, freq)*0.5)
                 print(f"Picoscopes sampling for {freq}Hz")
-                ##self.log(f"Picoscopes sampling for {freq}Hz")
                 res = await self.run_one_freq(freq)
-                self.saveData(frequency_index, res)
-                self.results.append(res)      #This is where the sampling happens
 
+                self.saveData(frequency_index, freq, res)
+                self.results.append(res)      #This is where the sampling happens
 
         async def admiral_task():
             """
@@ -130,6 +125,8 @@ class Measurer():
                 self.admiral_ready.clear()
                 for _ in range(self.num_picoscopes):
                     self.pico_ready.acquire()
+
+                print("resuming experiment")
                 handler.resumeExperiment(self.squid_channel)
                 
         task_p = asyncio.create_task(pico_task())
@@ -141,10 +138,9 @@ class Measurer():
 
     def run_one_pico(self, picoscope_index, timebase, samples):
             for channel_index in range(4):
-                valid_buffers = ps.ps4000aSetDataBuffers(self.c_handle[picoscope_index],
+                valid_buffers = ps.ps4000aSetDataBuffer(self.c_handle[picoscope_index],
                                                         channel_index,
                                                         ctypes.byref(self.bufferMax[picoscope_index][channel_index]),
-                                                        ctypes.byref(self.bufferMin[picoscope_index][channel_index]),
                                                         samples,
                                                         0,
                                                         0)
@@ -162,11 +158,9 @@ class Measurer():
 
             ready = ctypes.c_int16(0)
             check = ctypes.c_int16(0)
-            t1 = time.time()
             while ready.value == check.value:
                 ps.ps4000aIsReady(self.c_handle[picoscope_index], ctypes.byref(ready))      #Making sure the program waits until Pico is done sampling
-            t2 = time.time()
-
+            
             overflow = ctypes.c_int16()
             error_GetValues = ps.ps4000aGetValues(self.c_handle[picoscope_index], 0, ctypes.byref(ctypes.c_int16(samples)), 0, 0, 0,  ctypes.byref(overflow))
             assert_pico_ok(error_GetValues)
@@ -185,28 +179,36 @@ class Measurer():
 
             for channel_index in range(4):
                 if self.channels[picoscope_index, channel_index]:
-                    ps.ps4000aSetChannel(self.c_handle[picoscope_index],
+                    pico_channel_status = ps.ps4000aSetChannel(self.c_handle[picoscope_index],
                                         channel_index,
                                         1,
                                         1,
                                         self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
                                         0)
+                    assert_pico_ok(pico_channel_status)
 
         print("PicoScope(s) is(are) ready")
-        #self.log("PicoScope(s) is(are) ready")
         
     async def run_one_freq(self, freq):
         """
         Does the sampling for a single frequency. Is called once per frequency.
         """
+        if freq > 1000:
+            periods = 0.2 * freq
+        elif freq > 10:
+                periods = freq 
+        else:
+            periods = 3 * freq
+
         timebase = find_timebase(freq)
-        samples = int(np.ceil(sample_time(self.periods, freq)/((timebase-2)*20e-9)))
+        print(f"Timebase used for {freq}Hz is: {timebase}")
+        samples = int(np.ceil(sample_time(periods, freq)/((timebase-2)*20e-9)))
+        print(f"Samples for {freq}Hz: {samples}, and timebase: {timebase}")
         time_intervals = ctypes.c_float()
         returned_max_samples = ctypes.c_int32()
-        print(f"sample time: {sample_time(self.periods, freq)}")
-        ##self.log(f"sample time: {sample_time(self.periods, freq)}")
+        print(f"sample time: {sample_time(periods, freq)}")
+
         self.bufferMax = []
-        self.bufferMin = []
 
         threads = []
         for picoscope_index in range(self.num_picoscopes):
@@ -215,28 +217,31 @@ class Measurer():
             assert_pico_ok(valid_timebase)
 
             self.bufferMax.append([])
-            self.bufferMin.append([])
             for channel_index in range(4):
                 self.bufferMax[picoscope_index].append((ctypes.c_int16*samples)())
-                self.bufferMin[picoscope_index].append((ctypes.c_int16*samples)())
             threads.append(threading.Thread(target=self.run_one_pico, args=(picoscope_index, timebase, samples)))
 
         for thread in threads:
             thread.start()
+
         await self.admiral_started_event.wait()
         self.admiral_started_event.clear()
-        print("Waiting for measurements to complete")
-        ##self.log("Waiting for measurements to complete")
+        print("Waiting for threads")
         for thread in threads:
             thread.join()
 
         freq_results = np.zeros([self.num_picoscopes, 4, samples])
-        maxADC = ctypes.c_int16(32767) #?????
-        for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(4):
-                freq_results[picoscope_index, channel_index] = adc2mV(self.bufferMax[picoscope_index][channel_index],
-                                                    self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
-                                                    self.constants["maxADC"])        #transforming data in buffer into readable mV data
+        try:
+            for picoscope_index in range(self.num_picoscopes):
+                for channel_index in range(4):
+                    fs = samples/sample_time(periods,freq)
+                    print(f"early into bufferMax: {self.bufferMax[picoscope_index][channel_index][10]}")
+                    unfiltered_results = np.asarray(adc2mV(self.bufferMax[picoscope_index][channel_index],
+                                                        self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
+                                                        self.constants["maxADC"]))        #transforming data in buffer into readable mV data
+                    freq_results[picoscope_index, channel_index] = filter_data(unfiltered_results, freq, fs)
+        except Exception as exc:
+            print(exc)
         return freq_results
 
     def pico_close(self):
@@ -248,37 +253,50 @@ class Measurer():
             ps.ps4000aFlashLed(self.c_handle[i],0)
             ps.ps4000aCloseUnit(self.c_handle[i])
         print("Closed picoscopes")
-        #self.log("Closed picoscopes")
 
     def plot(self):
         for frequency_index in range(self.num_freqs):
+            if self.range_of_freqs[frequency_index] > 1000:
+                periods = self.range_of_freqs[frequency_index] * 0.2
+            elif self.range_of_freqs[frequency_index]  > 10:
+                periods = self.range_of_freqs[frequency_index]  
+            else:
+                periods = 3 * self.range_of_freqs[frequency_index]                
             for picoscope_index in range(self.num_picoscopes):
-                for channel_index in range(1,3):
-                    t = np.linspace(0,sample_time(self.periods, self.range_of_freqs[frequency_index]),len(self.results[frequency_index][picoscope_index,channel_index]))
-                    fs = len(self.results[frequency_index][picoscope_index,channel_index])/sample_time(self.periods, self.range_of_freqs[frequency_index])
+                for channel_index in range(1,4):
+                    if self.channels[picoscope_index, channel_index]:
+                        t = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(self.results[frequency_index][picoscope_index,channel_index]))
+                        fs = len(self.results[frequency_index][picoscope_index,channel_index])/sample_time(periods, self.range_of_freqs[frequency_index])
+                        print(f"length of t is: {len(t)}")
+                        #filtered_res = filter_data(self.results[frequency_index][picoscope_index,channel_index], self.range_of_freqs[frequency_index], fs)
+                        filtered_res = self.results[frequency_index][picoscope_index,channel_index]
 
-                    filtered_res = filter_data(self.results[frequency_index][picoscope_index,channel_index], self.range_of_freqs[frequency_index], fs)
+                        plt.subplot(1,2,1)
+                        plt.plot(t, filtered_res, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
 
-                    plt.subplot(1,2,1)
-                    plt.plot(t, filtered_res, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
-
-                    fourier = np.fft.fft(filtered_res)
-                    f = np.fft.fftfreq(len(fourier))*fs
-                
-                    plt.subplot(1,2,2)
-                    plt.plot(f, fourier, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
+                        fourier = np.fft.fft(filtered_res)
+                        f = np.fft.fftfreq(len(fourier))*fs
+                    
+                        plt.subplot(1,2,2)
+                        plt.plot(f, fourier, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
 
                 plt.legend()
                 plt.show()
+
     
-    def saveData(self, frequency_index, results):
+    def saveData(self, frequency_index, freq, results):
         start_time = time.time()
         print("\nStart making raw data file:")
         #self.log("Start making raw data file:")
 
         lst = []
 
-        time_ax = np.linspace(0,sample_time(self.periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
+        if freq > 10:
+                periods = freq 
+        else:
+            periods = 3 * freq
+
+        time_ax = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
 
         for k in range(len(time_ax)):                                                    
             lst.append(str(time_ax[k]))
@@ -290,7 +308,7 @@ class Measurer():
 
         
         save_file = open(f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt","x")
-        processing_file = open(f"Data_for_processing\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt","x")
+        processing_file = open("temp.txt","x")
 
         save_file.write("Date: \t" + datetime.today().strftime("%Y-%m-%d-") + "\n")
         save_file.write("Time: \t" + datetime.now().strftime("%H%M-%S") + "\n\n")
@@ -339,7 +357,7 @@ class Measurer():
         processing_file.write("\n")
         save_file.write("s")
         processing_file.write("s")
-        print(len(results))
+
         for picoscope_index in range(self.num_picoscopes):
             for channel_index in range(4):
                 if self.channels[picoscope_index, channel_index]:
@@ -355,6 +373,8 @@ class Measurer():
         processing_file.writelines(lst)
         save_file.close()
         processing_file.close()
+
+        os.rename("temp.txt", f"Data_for_processing\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
         print(f"Raw data file closed after {time.time() - start_time} s.")
         #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
 
@@ -367,12 +387,11 @@ def find_timebase(freq):
     """
     Helper function to calculate timebase for each frequency. This is to avoid oversampling lower frequencies
     """
-    sampling_freq_multiplier = 200
+    sampling_freq_multiplier = 25
     return int(np.ceil(50000000/(sampling_freq_multiplier*freq)+ 2))
 
 def filter_data(data, freq, fs):
-    filtered_data = data/max(abs(data))
-    filtered_data = filtered_data - statistics.mean(filtered_data)
+    filtered_data = data - statistics.mean(data)
     filtered_data = butter_lowpass_filter(filtered_data, [0.25*freq, 4*freq], fs, order=4)
     return filtered_data
 
