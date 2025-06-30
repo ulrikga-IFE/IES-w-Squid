@@ -15,10 +15,9 @@ the results. For further specification see the class description.
 from dependencies.GUI_helper import PlotCanvas
 import numpy as np
 from matplotlib.colors import LogNorm
-from numpy.fft import rfft, rfftfreq
+from scipy.fft import rfft, rfftfreq, next_fast_len
 from scipy.signal import find_peaks
 import os
-
 
 class EIS_Sample:
     """
@@ -30,7 +29,7 @@ class EIS_Sample:
     Main methods:
     ----------
     - watch_call :
-        Instantiates a object from a file and does the RFFT and saves
+        Instantiates a object from a file and does the fft and saves
         the impedance data to file. The instanse is returned for further use.
     - plot_somthing :
         Either nyquist, bode or fft_spectrum. The functions either take a axis
@@ -45,7 +44,7 @@ class EIS_Sample:
     - __init__
     - classmethod from_file
     - save_to_MMFILE
-    - RFFT
+    - fft
 
 
     """
@@ -74,10 +73,10 @@ class EIS_Sample:
             The sample frequency used in Hertz
         - voltage_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the voltage RFFT
+            counted as a valid peak, in the voltage fft
         - current_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the current RFFT
+            counted as a valid peak, in the current fft
 
         Does:
         ----------
@@ -139,10 +138,10 @@ class EIS_Sample:
             The column of the current loging in the file (zero indexed)
         - voltage_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the voltage RFFT
+            counted as a valid peak, in the voltage fft
         - current_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the current RFFT
+            counted as a valid peak, in the current fft
         - current_factor : float, default 0.01
             A factor to multiply the current data with. Relevant if a quasi
             measurment is done or some loging error is done.
@@ -164,11 +163,11 @@ class EIS_Sample:
         together with the ones passed in to this function.
         """
         # Getting the header unit names
-        header = np.loadtxt(file_path, skiprows=1, max_rows=1, dtype=str)
+        header = np.loadtxt(file_path, skiprows=21, max_rows=1, dtype=str)
         # Making a bool array with True if the unit is in milli-
         is_in_m = ["m" in name for name in header]
-        # Loading the data after skipping 3 rows
-        data = np.loadtxt(file_path, skiprows=3)
+        # Loading the data after skipping 23 rows
+        data = np.loadtxt(file_path, skiprows=23)
         # Getting the different parts as seperate arrays and converting is in milli-
         time_data = data[:, time_loc]
         if is_in_m[time_loc]:
@@ -205,7 +204,7 @@ class EIS_Sample:
 
         Does:
         ----------
-        Saves the data stored in impedance and FFT_frequencies and
+        Saves the data stored in impedance and fft_frequencies and
         saves it to the full_save_path in the MMFILE format, mening:
         Frequency   Real    Complex
         Number      Number  Number
@@ -214,16 +213,16 @@ class EIS_Sample:
         """
         with open(full_save_path, "w") as f:
             f.write("Frequency\tReal\tImaginary")
-            for imp, freq in zip(self.impedance, self.FFT_frequencies):
+            for imp, freq in zip(self.impedance, self.fft_frequencies):
                 f.write(f"\n{freq}\t{imp.real}\t{imp.imag}")
 
-    def RFFT(self):
+    def fft(self):
         """
         Does:
         ----------
 
-        Computes the RFFT (FFT but only with real input) of the voltage and current.
-        Then the peaks of the two RFFT's are found separatly and the intersection
+        Computes the rfft (fft but only with real input) of the voltage and current.
+        Then the peaks of the two fft's are found separatly and the intersection
         of these peaks are taken as the found peaks for the impedances. Thus the
         impedance of the peaks are calculated by voltage / current.
 
@@ -232,18 +231,18 @@ class EIS_Sample:
         voltage- and current_proportion, which give the porportion of the max signal
         the peaks have to be above.
 
-        If a window function is applied to filter, this will apply this prior to the RFFT 
-        and a normalization is applied according to the window function to the RFFT processed data.
+        If a window function is applied to filter, this will apply this prior to the fft 
+        and a normalization is applied according to the window function to the fft processed data.
 
         Stored values:
         ----------
-        - all_FFT_frequencies : All the frequencies that are calculated
-        - all_FFT_voltage  : All the voltage fourier components
-        - all_FFT_current : All the current fourier componets
-        - voltage_indicies : The indicies of the found peaks in the voltage RFFT
-        - current_indicies : The indicies of the found peaks in the current RFFT
+        - all_fft_frequencies : All the frequencies that are calculated
+        - all_fft_voltage  : All the voltage fourier components
+        - all_fft_current : All the current fourier componets
+        - voltage_indicies : The indicies of the found peaks in the voltage fft
+        - current_indicies : The indicies of the found peaks in the current fft
         - indicies : The intersection of the voltage and current_indicies
-        - FFT_frequencies : The frequency of the found peaks
+        - fft_frequencies : The frequency of the found peaks
         - impedance : The impedance calculated at the peaks
         """
         # Sample size
@@ -256,16 +255,18 @@ class EIS_Sample:
         # - check if filter is applied
         # - apply the correct or no filter to the time data
         # - calculate the impedance and save the data for plotting
-        # - normalize the data (before or after FFT?) it doesn't matter right?
+        # - normalize the data (before or after fft?) it doesn't matter right?
+        fft_length = next_fast_len(N, real=True)
+
         if self.filter_apply == True:
             normalization_factor = 0.0
             if self.filter_type == "Rectangle":
                 # Rectangle filter is really no filter
-                # Compute FFTs, rfft method used since input is real
-                fft_voltage = rfft(self.voltage) * 1.0 / N
-                fft_current = rfft(self.current) * 1.0 / N
+                # Compute ffts, rfft method used since input is real
+                fft_voltage = rfft(self.voltage, fft_length) * 1.0 / N
+                fft_current = rfft(self.current, fft_length) * 1.0 / N
 
-                fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+                fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
 
             elif self.filter_type == "Hann":
                 # Apply filter function to the input data
@@ -277,11 +278,11 @@ class EIS_Sample:
                 # Calculate normalization factor
                 normalization_factor = sum(np.hanning(N))/N
 
-                # Compute FFTs on the filtered data
-                fft_voltage = rfft(self.voltage_window) * 1.0 / N / normalization_factor
-                fft_current = rfft(self.current_window) * 1.0 / N / normalization_factor
+                # Compute ffts on the filtered data
+                fft_voltage = rfft(self.voltage_window, fft_length) * 1.0 / N / normalization_factor
+                fft_current = rfft(self.current_window, fft_length) * 1.0 / N / normalization_factor
 
-                fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+                fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
 
             elif self.filter_type == "Hamming":
                 # Apply filter function to the input data
@@ -293,11 +294,11 @@ class EIS_Sample:
                 # Calculate normalization factor
                 normalization_factor = sum(np.hamming(N))/N
 
-                # Compute FFTs on the filtered data
-                fft_voltage = rfft(self.voltage_window) * 1.0 / N / normalization_factor
-                fft_current = rfft(self.current_window) * 1.0 / N / normalization_factor
+                # Compute ffts on the filtered data
+                fft_voltage = rfft(self.voltage_window, fft_length) * 1.0 / N / normalization_factor
+                fft_current = rfft(self.current_window, fft_length) * 1.0 / N / normalization_factor
 
-                fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+                fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
                 
             elif self.filter_type == "Blackman":
                 # Apply filter function to the input data
@@ -309,11 +310,11 @@ class EIS_Sample:
                 # Calculate normalization factor
                 normalization_factor = sum(np.blackman(N))/N
 
-                # Compute FFTs on the filtered data
-                fft_voltage = rfft(self.voltage_window) * 1.0 / N / normalization_factor
-                fft_current = rfft(self.current_window) * 1.0 / N / normalization_factor
+                # Compute ffts on the filtered data
+                fft_voltage = rfft(self.voltage_window, fft_length) * 1.0 / N / normalization_factor
+                fft_current = rfft(self.current_window, fft_length) * 1.0 / N / normalization_factor
 
-                fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+                fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
                 
 
             elif self.filter_type == "Kaiser":
@@ -325,30 +326,32 @@ class EIS_Sample:
                 # Calculate normalization factor
                 normalization_factor = sum(np.kaiser(N,self.beta_factor))/N
 
-                # Compute FFTs on the filtered data
-                fft_voltage = rfft(self.voltage_window) * 1.0 / N / normalization_factor
-                fft_current = rfft(self.current_window) * 1.0 / N / normalization_factor
+                # Compute ffts on the filtered data
+                fft_voltage = rfft(self.voltage_window, fft_length) * 1.0 / N / normalization_factor
+                fft_current = rfft(self.current_window, fft_length) * 1.0 / N / normalization_factor
 
-                fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+                fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
         else:
-            # Compute FFTs, rfft method used since input is real
+            # Compute ffts, fft method used since input is real
             fft_voltage = rfft(self.voltage) * 1.0 / N
             fft_current = rfft(self.current) * 1.0 / N
 
-            fft_frequencies = rfftfreq(N, 1 / self.sample_frequency)
+            fft_frequencies = rfftfreq(fft_length, 1 / self.sample_frequency)
         
+
+        """
         # Removing the data at frequency lower than twice the lowest frequency resolution
         remove_indicies = np.array([0, 1, 2, 3, 4, 5, 6])            # ORIGINAL STATEMENT IS [0,1,2,3]
         fft_voltage[remove_indicies] = np.zeros(len(list(remove_indicies)))        
         fft_current[remove_indicies] = np.zeros(len(list(remove_indicies)))
-
+        """
+        
         # Calculating indicies of max
-
         # We want to force it at the desired frequency. The way to do this is simply get the resolution and the frequency, 
-        # and thus find the indice that is relevant. We also tweak this so this is indeed a peak in the FFT data.
+        # and thus find the indice that is relevant. We also tweak this so this is indeed a peak in the fft data.
         # height = max(np.abs(fft_voltage)) * self.voltage_proportion
         #voltage_indicies = find_peaks(np.abs(fft_voltage), height=height)[0]
-        height = max(np.abs(fft_current)) * self.current_proportion
+        #height = max(np.abs(fft_current)) * self.current_proportions
 
         def find_closest_frequency_index(fft_frequencies, target_frequency):
             closest_index = min(range(len(fft_frequencies)), key=lambda i: abs(fft_frequencies[i] - target_frequency))
@@ -383,20 +386,21 @@ class EIS_Sample:
 
 
         current_indicies = find_nearest_maximum(fft_current, fft_frequencies, self.frequency_now)
-
+            
         #current_indicies = current_indicies[-1]
         voltage_indicies = current_indicies             # Just a fix so that it's the same
+        #voltage_indicies = find_nearest_maximum(fft_voltage, fft_frequencies, self.frequency_now)
         # Taking the indicies that are shared by both voltage and current
         indicies = np.intersect1d(voltage_indicies, current_indicies)
 
         # Storing all relevant variables
-        self.all_FFT_frequencies = fft_frequencies
-        self.all_FFT_voltage = fft_voltage
-        self.all_FFT_current = fft_current
+        self.all_fft_frequencies = fft_frequencies
+        self.all_fft_voltage = fft_voltage
+        self.all_fft_current = fft_current
         self.voltage_indicies = voltage_indicies
         self.current_indicies = current_indicies
         self.indicies = indicies
-        self.FFT_frequencies = fft_frequencies[indicies]
+        self.fft_frequencies = fft_frequencies[indicies]
         self.impedance = fft_voltage[indicies] / fft_current[indicies]  # Corrected by THolm  
        
 
@@ -495,10 +499,10 @@ class EIS_Sample:
             The column of the current loging in the file (zero indexed)
         - voltage_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the voltage RFFT
+            counted as a valid peak, in the voltage fft
         - current_proportion : float, default 0.1
             The proportion of the maximum height a peak have to have to be
-            counted as a valid peak, in the current RFFT
+            counted as a valid peak, in the current fft
         - current_factor : float, default 0.01
             A factor to multiply the current data with. Relevant if a quasi
             measurment is done or some loging error is done.
@@ -506,7 +510,7 @@ class EIS_Sample:
             If True the voltage index is added to the savefilename if False
             it is not added.
         - filter_apply: bool, default True
-            If True a filter is to be applied prior to FFT
+            If True a filter is to be applied prior to fft
         - filter_type: string, default Kaiser
             A string that determines the type of filter to be used
         - beta_factor: float, default 4.2
@@ -515,13 +519,13 @@ class EIS_Sample:
         Does:
         ----------
         Makes a sample that reads data from the text file, details in the
-        method from_file. After this it calls the RFFT method and saves
+        method from_file. After this it calls the fft method and saves
         the results.
 
 
         Returns:
         ----------
-        The instance of the class created from the file with the RFFT done.
+        The instance of the class created from the file with the fft done.
 
         """
 
@@ -540,7 +544,7 @@ class EIS_Sample:
             beta_factor=beta_factor,
             frequency_now=frequency_now,
         )
-        sample.RFFT()
+        sample.fft()
         full_save_path = EIS_Sample.get_full_save_path(
             save_path, file_path, voltage_loc=voltage_loc, add_loc_save=add_loc_save
         )
@@ -568,7 +572,7 @@ class EIS_Sample:
         axis.scatter(
             self.impedance.real,
             -self.impedance.imag,
-            c=self.FFT_frequencies,
+            c=self.fft_frequencies,
             norm=LogNorm(),
         )
         axis.axis("equal")
@@ -605,18 +609,18 @@ class EIS_Sample:
         frequency.
         """
         axises[0].scatter(
-            self.FFT_frequencies,
+            self.fft_frequencies,
             np.abs(self.impedance),
-            c=self.FFT_frequencies,
+            c=self.fft_frequencies,
             norm=LogNorm(),
         )
         axises[0].set_xscale("log")
         axises[0].set_yscale("log")
         axises[0].grid()
         axises[1].scatter(
-            self.FFT_frequencies,
+            self.fft_frequencies,
             np.angle(self.impedance) * 180 / np.pi,
-            c=self.FFT_frequencies,
+            c=self.fft_frequencies,
             norm=LogNorm(),
         )
         axises[1].set_xscale("log")
@@ -645,56 +649,56 @@ class EIS_Sample:
         Parameters:
         ----------
         - axises : A iterable (usualy np.array) with to matplotlib axises.
-            The first axis used to plot the amplitude of the voltage RFFT and the
-            second axis used to plot the current RFFT of the impedance.
+            The first axis used to plot the amplitude of the voltage fft and the
+            second axis used to plot the current fft of the impedance.
         - figure : The matplotlib figure that the axises are a part of.
 
         Does:
         ----------
-        Draws the amplitude of the absolute value of voltage RFFT to
-        the first axis and the absolute value of the current RFFT to
+        Draws the amplitude of the absolute value of voltage fft to
+        the first axis and the absolute value of the current fft to
         the second axis. In both plots the red cross indicate where
-        a peak is located in the different RFFT's and the dots
+        a peak is located in the different fft's and the dots
         represent the intersections of both locations of peaks.
         The color of the dots are given by the logarithm of
         there frequency.
         """
         axises[0].scatter(
-            self.all_FFT_frequencies[self.voltage_indicies],
-            np.abs(self.all_FFT_voltage[self.voltage_indicies]),
+            self.all_fft_frequencies[self.voltage_indicies],
+            np.abs(self.all_fft_voltage[self.voltage_indicies]),
             c="r",
             marker="x",
         )
         axises[0].scatter(
-            self.FFT_frequencies,
-            np.abs(self.all_FFT_voltage[self.indicies]),
-            c=self.FFT_frequencies,
+            self.fft_frequencies,
+            np.abs(self.all_fft_voltage[self.indicies]),
+            c=self.fft_frequencies,
             norm=LogNorm(),
         )
 
-        axises[0].plot(self.all_FFT_frequencies, np.abs(self.all_FFT_voltage))
+        axises[0].plot(self.all_fft_frequencies, np.abs(self.all_fft_voltage))
         axises[0].set_xscale("log")
         axises[0].set_yscale("log")
         axises[0].grid()
-        axises[0].set_ylabel(r"FFT Voltage")
+        axises[0].set_ylabel(r"fft Voltage")
         axises[1].scatter(
-            self.all_FFT_frequencies[self.current_indicies],
-            np.abs(self.all_FFT_current[self.current_indicies]),
+            self.all_fft_frequencies[self.current_indicies],
+            np.abs(self.all_fft_current[self.current_indicies]),
             c="r",
             marker="x",
         )
         axises[1].scatter(
-            self.FFT_frequencies,
-            np.abs(self.all_FFT_current[self.indicies]),
-            c=self.FFT_frequencies,
+            self.fft_frequencies,
+            np.abs(self.all_fft_current[self.indicies]),
+            c=self.fft_frequencies,
             norm=LogNorm(),
         )
-        axises[1].plot(self.all_FFT_frequencies, np.abs(self.all_FFT_current))
+        axises[1].plot(self.all_fft_frequencies, np.abs(self.all_fft_current))
         axises[1].set_xscale("log")
         axises[1].set_yscale("log")
         axises[1].grid()
         axises[1].set_xlabel("Frequency [Hz]")
-        axises[1].set_ylabel(r"FFT Current")
+        axises[1].set_ylabel(r"fft Current")
 
         figure.tight_layout()
 

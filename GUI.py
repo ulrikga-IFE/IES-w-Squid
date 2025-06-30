@@ -183,7 +183,7 @@ class GUI():
         frequencies_selected_label.grid(row=num_picoscopes+19,column=1, sticky='nsew')
         self.frequencies_selected = tk.Entry(self.root)#,height=1,width=35)
         self.frequencies_selected.grid(row=num_picoscopes+20,column=1, columnspan = 4, sticky='nsew')     
-        self.frequencies_selected.insert(0,"2000,1000,500,100,50,10,5,1")
+        self.frequencies_selected.insert(0,"10000,5000,2000,1000,500,200,100,50,20,10,5,2,1")
 
         self.runwithoutpstat_button = tk.Label(self.root,text="Run without potentiostat:")
         self.runwithoutpstat_button.grid(row=num_picoscopes+21,column=1,sticky='nsew')
@@ -352,15 +352,12 @@ class GUI():
         self.save_time_string = time_path #this is done to interface better with previously written code (specifically save_total_mm)
         
         save_path = f"Raw_data\\{time_path}"
-        processing_path = f"Data_for_processing\\{time_path}"
     
         do_experiment = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to proceed with experiment?")
         
         if do_experiment:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            if not os.path.exists(processing_path):
-                os.makedirs(processing_path)
 
             pool = Pool(processes=1)
             pool.apply_async(self.do_experiment, [num_picoscopes, channels, range_of_freqs, bias, amplitude, self.constants, self.parameters, time_path])
@@ -434,22 +431,22 @@ class GUI():
         measurer.plot()
 
     def process_data(self, num_picoscopes, channels, resistor_value, num_freqs, save_path):
-        counter = 0
+        counter = 1
+        current_channels_watch_imp = ""
+        voltage_channels_watch_imp = ""
         for picoscope_index in range(num_picoscopes):
-            current_channel = counter + 1
-            voltage_channels_watch_imp = str(current_channel + 1)     #Has to have a channel that is the next, so with this, 
-                                                                                #it is not really allowed to use for example channel A and C, but only A and B if two channels.
-            counter += 2
-            for channel_index in range(2,4):
+            current_channels_watch_imp += "," +str(counter)
+            counter += 1
+            for channel_index in range(1,4):
                 if channels[picoscope_index,channel_index]:
-                    add_string = ","+str(counter + 1)
-                    voltage_channels_watch_imp += add_string
+                    voltage_channels_watch_imp += ","+str(counter)
                     counter += 1
-            print("Voltage channels used: "+ voltage_channels_watch_imp)
-
-            watcher = watch_impedance_V2.Interface(current_channel, voltage_channels_watch_imp, resistor_value, num_freqs, save_path, picoscope_index==(num_picoscopes-1), self.save_total_mm)
-
-            watcher.start_watch()
+        current_channels_watch_imp = current_channels_watch_imp[1:]
+        voltage_channels_watch_imp = voltage_channels_watch_imp[1:]
+        print("Current channels used: " + current_channels_watch_imp)
+        print("Voltage channels used: "+ voltage_channels_watch_imp)
+        watcher = watch_impedance_V2.Interface(current_channels_watch_imp, voltage_channels_watch_imp, resistor_value, num_freqs, save_path, picoscope_index==(num_picoscopes-1), self.save_total_mm)
+        watcher.start_watch()
 
     def save_total_mm(self):
         merge_start = time.time()
@@ -543,6 +540,7 @@ class GUI():
                             # Criteria for K-K, that the real residual is less than 10%. For now this function is basically turned off
                             #if abs(res_real[p-1]) < 1:
                                     fil.write(line)
+
                         fil.close()
                         print(f"Made .mm file for pico: {picoscope_index} channel: {channel_index}")
             
@@ -574,10 +572,9 @@ class GUI():
         self.log("Opening fitting window")
         fitting_dash.interface()
 
-
 if __name__ == "__main__":
     current_directory = os.path.dirname(os.path.abspath(__file__))
-    folder_names = ['Save_folder', 'Total_mm', 'Raw_data', 'Data_for_processing']
+    folder_names = ['Save_folder', 'Total_mm', 'Raw_data']
     for folder_name in folder_names:
         temp_folder_path = os.path.join(current_directory, folder_name)
         if not os.path.exists(temp_folder_path):

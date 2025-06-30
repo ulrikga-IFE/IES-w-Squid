@@ -83,7 +83,7 @@ class Watchdog(PatternMatchingEventHandler, Observer):
 
 
 class Interface:
-    def __init__(self,current_channel,channels_from_main, resistor_value, num_freqs, save_path, is_last, save_final):
+    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, is_last, save_final):
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
         the programs looping.
@@ -93,8 +93,8 @@ class Interface:
         self.watch_path = "."
         self.save_path = "."
         self.temp_save_path = "temp_watch_impedance"
-        self.current_channel = current_channel
-        self.channels_from_main = channels_from_main
+        self.current_channels = current_channels
+        self.voltage_channels = voltage_channels
         self.resistor_value = str(resistor_value)
         self.num_freqs = num_freqs
 
@@ -243,8 +243,8 @@ class Interface:
         ]
         # Setting default values                          ####################################### CHANGE DEFAULT VALUES HERE ################################################
         self.inboxes[0].set("0")
-        self.inboxes[1].set(self.channels_from_main)    # Gets the channels you picked at the beginning (except 'current channel' 1)
-        self.inboxes[2].set(self.current_channel)                        # Hard coded as 1 as standard (channel 1 = first channel on picoscope).
+        self.inboxes[1].set(self.voltage_channels)    # Gets the channels you picked at the beginning (except 'current channel' 1)
+        self.inboxes[2].set(self.current_channels)                        # Hard coded as 1 as standard (channel 1 = first channel on picoscope).
         self.inboxes[3].set("0.001")                                    # This is set very low because that includes all peaks, and ensures that the current peak is also found in the potential sweep.
         self.inboxes[4].set("0.4")                                     # SHOULD BE 0.5
         self.inboxes[5].set(self.resistor_value)                      # This is set as Ohm to be more understandable. Option let's the operator set this in the main GUI interface
@@ -274,7 +274,7 @@ class Interface:
                 ]
 
         self.value_inside = tk.StringVar(self.nroot)        
-        self.value_inside.set("Kaiser")
+        self.value_inside.set("Rectangle")
 
         self.option_default = self.options[0]
 
@@ -312,22 +312,21 @@ class Interface:
         # Index of time
         out.append(int(float(self.inboxes[0].get())))
         # Index of voltage, possible many
-        voltage_loc_str = self.inboxes[1].get()
-        # Check if multiple
-        if "," in voltage_loc_str:
-            voltage_loc = [
-                int(float(loc_str)) for loc_str in voltage_loc_str.split(",")
+        voltage_loc = [
+                int(float(loc_str)) for loc_str in self.inboxes[1].get().split(",")
             ]
-            out.append(voltage_loc)
-        else:
-            out.append(int(float(self.inboxes[1].get())))
-        # Current index
-        out.append(int(float(self.inboxes[2].get())))
+        out.append(voltage_loc)
+        # Index of current, possible many
+        current_loc = [
+                int(float(loc_str)) for loc_str in self.inboxes[2].get().split(",")
+            ]
+        out.append(current_loc)
+
         # Voltage prominence
         out.append(float(self.inboxes[3].get()))
         # Current prominence
         out.append(float(self.inboxes[4].get()))
-        # Current corection factor
+        # Current correction factor
         out.append(float(self.inboxes[5].get()))
         return out
 
@@ -506,33 +505,16 @@ class Interface:
         self.filter_type= self.value_inside.get()
         self.beta_factor= self.filters[0].get()
 
-        # Checking is the voltage indicies are more than one (Iterable)
-        if isinstance(parameters[1], Iterable):
-            # Loops through the different voltage indicies if several
-            for voltage_loc in parameters[1]:
-                # Check if the file should be processed
-                save = True
-                full_save_file_path = EIS_Sample.get_full_save_path(
-                    save_path, file_path, voltage_loc=voltage_loc, add_loc_save=True
-                )
-                if os.path.exists(full_save_file_path):
-                    # Ask yes/no queston if the save file already exsists
-                    '''
-                    save = GUI.popupYesNo(
-                        f"The save file {full_save_file_path} already exists, do you want to overwrite?",
-                        "File already exists",
-                    )
-                    '''
-                    save = True
-                # When file should be processed
-                if save:
-                    # Create EIS_Sample and do RFFT,fit, and saving
+        # Loops through the different voltage indicies if several
+        for current_loc in parameters[2]:
+            for voltage_loc in range(current_loc+1, current_loc+3):
+                if voltage_loc in parameters[1]:
                     sample = EIS_Sample.watch_call(
                         file_path,
                         save_path,
                         time_loc=parameters[0],
                         voltage_loc=voltage_loc,
-                        current_loc=parameters[2],
+                        current_loc=current_loc,
                         voltage_prominence=parameters[3],
                         current_prominence=parameters[4],
                         correction_factor_current=parameters[5],
@@ -561,56 +543,6 @@ class Interface:
                     # Update the window so all changes are visible
                     self.nroot.update()
                     
-        else:
-            voltage_loc = parameters[1]
-            save = True
-            full_save_file_path = EIS_Sample.get_full_save_path(
-                save_path, file_path, voltage_loc, True
-            )
-            if os.path.exists(full_save_file_path):
-                # Ask yes/no queston if the save file already exsists
-                save = GUI_helper.popupYesNo(
-                    f"The save file {full_save_file_path} already exists, do you want to overwrite?",
-                    "File already exists",
-                )
-            #print("Doing single file fitting")
-            if save:
-                # Create EIS_Sample and do RFFT,fit, and saving
-                sample = EIS_Sample.watch_call(
-                    file_path,
-                    save_path,
-                    time_loc=parameters[0],
-                    voltage_loc=voltage_loc, #parameters[1],
-                    current_loc=parameters[2],
-                    voltage_prominence=parameters[3],
-                    current_prominence=parameters[4],
-                    correction_factor_current=parameters[5],
-                    filter_apply=self.filter_apply,
-                    filter_type=self.filter_type,
-                    beta_factor=self.beta_factor,
-                )
-                # Log that this file is finished
-                self.log(f"Successfully saved and processed data voltage index {voltage_loc}.")
-                # Plot to the different figures
-                self.plot_canvas_nyquist.clear()
-                sample.plot_nyquist_canvas(self.plot_canvas_nyquist)
-                self.plot_canvas_nyquist.update()
-
-                self.plot_canvas_bode.clear()
-                sample.plot_bode_canvas(self.plot_canvas_bode)
-                self.plot_canvas_bode.update()
-
-                self.plot_canvas_fft.clear()
-                sample.plot_fft_spectrum_canvas(self.plot_canvas_fft)
-                self.plot_canvas_fft.update()
-                self.nroot.update()
-        # log any error that happens
-        #except Exception as E:
-        #    self.log(
-        #        f"The following error occured while trying to process {os.path.basename(file_path)}:\n{str(E)}"
-        #    )
-        #    print(f"The following error occured while trying to process {os.path.basename(file_path)}:\n{str(E)}")
-
         self.files_processed += 1
         if self.files_processed ==  self.num_freqs:
             self.stop_watch()
@@ -618,7 +550,7 @@ class Interface:
     def select_path(self,save_path):
         """Helper function to select input folder/directory, called by Browse watch button"""
         # Ask for input file folder/directory
-        path = f"Data_for_processing\\{save_path}"
+        path = f"Raw_data\\{save_path}"
         # If the path is not ""
         if path:
             # Store in object and log that it is selected

@@ -152,7 +152,7 @@ class Measurer():
             self.pico_ready.release()
             self.admiral_started_sem.acquire()
 
-            time.sleep(1)
+            time.sleep(2)
             error_RunBlock = ps.ps4000aRunBlock(self.c_handle[picoscope_index], preTriggerSamples, postTriggerSamples, timebase, None, 0, None, None)
             assert_pico_ok(error_RunBlock)
 
@@ -235,7 +235,6 @@ class Measurer():
             for picoscope_index in range(self.num_picoscopes):
                 for channel_index in range(4):
                     fs = samples/sample_time(periods,freq)
-                    print(f"early into bufferMax: {self.bufferMax[picoscope_index][channel_index][10]}")
                     unfiltered_results = np.asarray(adc2mV(self.bufferMax[picoscope_index][channel_index],
                                                         self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
                                                         self.constants["maxADC"]))        #transforming data in buffer into readable mV data
@@ -263,7 +262,7 @@ class Measurer():
             else:
                 periods = 3 * self.range_of_freqs[frequency_index]                
             for picoscope_index in range(self.num_picoscopes):
-                for channel_index in range(1,4):
+                for channel_index in range(4):
                     if self.channels[picoscope_index, channel_index]:
                         t = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(self.results[frequency_index][picoscope_index,channel_index]))
                         fs = len(self.results[frequency_index][picoscope_index,channel_index])/sample_time(periods, self.range_of_freqs[frequency_index])
@@ -290,8 +289,9 @@ class Measurer():
         #self.log("Start making raw data file:")
 
         lst = []
-
-        if freq > 10:
+        if freq > 1000:
+            periods = 0.2 * freq
+        elif freq > 10:
                 periods = freq 
         else:
             periods = 3 * freq
@@ -307,8 +307,7 @@ class Measurer():
             lst.append("\n")
 
         
-        save_file = open(f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt","x")
-        processing_file = open("temp.txt","x")
+        save_file = open("temp.txt","x")
 
         save_file.write("Date: \t" + datetime.today().strftime("%Y-%m-%d-") + "\n")
         save_file.write("Time: \t" + datetime.now().strftime("%H%M-%S") + "\n\n")
@@ -343,38 +342,28 @@ class Measurer():
         save_file.write("Frequencies selected: \t" + str(self.range_of_freqs)+ "\n")               
         save_file.write("\n")
         save_file.write("Time")
-        processing_file.write("Time")
         for picoscope_index in range(self.num_picoscopes):
             for channel_index in range(4):
                 if self.channels[picoscope_index, channel_index]:
                     if picoscope_index == 0 and channel_index == 0:
                         save_file.write("\tCurrent (as voltage)")
-                        processing_file.write("\tCurrent (as voltage)")
                     else:
                         save_file.write(f"\tVoltage{picoscope_index}")
-                        processing_file.write(f"\tVoltage{picoscope_index}")
         save_file.write("\n")
-        processing_file.write("\n")
         save_file.write("s")
-        processing_file.write("s")
 
         for picoscope_index in range(self.num_picoscopes):
             for channel_index in range(4):
                 if self.channels[picoscope_index, channel_index]:
                     if picoscope_index == 0 and channel_index == 0:
                         save_file.write("\tmV")
-                        processing_file.write("\tmV")
                     else:
                         save_file.write("\tmV")
-                        processing_file.write("\tmV")
         save_file.write("\n\n")
-        processing_file.write("\n\n")
         save_file.writelines(lst)
-        processing_file.writelines(lst)
         save_file.close()
-        processing_file.close()
 
-        os.rename("temp.txt", f"Data_for_processing\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
+        os.rename("temp.txt", f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
         print(f"Raw data file closed after {time.time() - start_time} s.")
         #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
 
@@ -391,7 +380,8 @@ def find_timebase(freq):
     return int(np.ceil(50000000/(sampling_freq_multiplier*freq)+ 2))
 
 def filter_data(data, freq, fs):
-    filtered_data = data - statistics.mean(data)
+    mean = statistics.mean(data)
+    filtered_data = data - mean
     filtered_data = butter_lowpass_filter(filtered_data, [0.25*freq, 4*freq], fs, order=4)
     return filtered_data
 
