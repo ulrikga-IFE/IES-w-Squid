@@ -2,7 +2,6 @@ import tkinter as tk
 import tkinter.simpledialog
 import tkinter.font
 import numpy as np
-import threading
 import ctypes
 import matplotlib.pyplot as plt
 from PySide6.QtWidgets import QApplication
@@ -15,8 +14,6 @@ from datetime import datetime
 from multiprocessing import Pool
 import re
 import numpy as np
-from impedance.validation import linKK
-
 
 import measurements
 import watch_impedance_V2
@@ -65,10 +62,10 @@ class GUI():
                     chosen_channels += f"Channel {chr(65 + channel_index)} & " #note how 65 is the HTML number for A
             chosen_channels = chosen_channels[0:-3] + "\n"
     
-        if num_picoscopes < 10:
-                chosen = tk.Label(self.root,text=chosen_channels[0:-1])
-                chosen.grid(row=2+picoscope_index,column=2, sticky='nsew')
-        else:                                   # If more than or equal to 10 channels, the screen is to small so instead make button to show as pop up-window
+            if num_picoscopes < 10:
+                    chosen = tk.Label(self.root,text=chosen_channels[0:-1])
+                    chosen.grid(row=2+picoscope_index,column=2, sticky='nsew')
+        if num_picoscopes >= 10:                                   # If more than or equal to 10 channels, the screen is to small so instead make button to show as pop up-window
             chosen_channels_btn = tk.Button(self.root,text="Show chosen channels",command=lambda: self.show_chosen_channels(chosen_channels))
             chosen_channels_btn.grid(row=2,column=2, sticky='nsew')
 
@@ -428,7 +425,7 @@ class GUI():
             loop.run_until_complete(measurer.measure())
         app.quit()
 
-        measurer.plot()
+        #measurer.plot()
 
     def process_data(self, num_picoscopes, channels, resistor_value, num_freqs, save_path):
         counter = 1
@@ -461,25 +458,25 @@ class GUI():
 
         # Correctly identifies channels that are used for potential measurements, and not all channels
         for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(4):
+            for channel_index in range(1,4):
                 if(self.channels[picoscope_index][channel_index]):
                     make_file = False
                     for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
                         num = re.findall(r'\d+', filename)
                         #f = os.path.join("Save_folder",filename)
-                        if int(float(num[-1])) == picoscope_index + channel_index + 1:
+                        if int(float(num[-1])) == 4*picoscope_index + channel_index + 1:
                             make_file=True
 
                     # If the channel is found, it will merge all files ending in the right integer into a single .mmfile. We want this corrected to sort in order from high to low.
                     if make_file == True:    
-                        fil = open(f"Total_mm\\{self.save_time_string}\\total_mmfile_{picoscope_index + channel_index + 1}.mmfile", "w")
+                        fil = open(f"Total_mm\\{self.save_time_string}\\total_mmfile_{4*picoscope_index + channel_index + 1}.mmfile", "w")
 
                         fil.write("Frequency\tReal\tImaginary\n")
                         data_all = []
                         for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
                             num = re.findall(r'\d+', filename)
                             f = os.path.join(f"Save_folder\\{self.save_time_string}",filename)
-                            if int(float(num[-1])) == picoscope_index + channel_index + 1:
+                            if int(float(num[-1])) == 4*picoscope_index + channel_index + 1:
                                 tiny_file = open(f,"r")
                                 lines = tiny_file.readlines()
                                 length = len(lines)
@@ -508,7 +505,6 @@ class GUI():
 
                         data_all.sort(key=my_sort)
                         print(f"Data_all: {data_all}")
-                        # We have a sorted dataset in data_all. Now we can test Kramer-Kronig on it
                         f_from_FFT = []
                         Z_values_from_FFT = []
                         

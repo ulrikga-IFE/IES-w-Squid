@@ -507,8 +507,11 @@ class Interface:
 
         # Loops through the different voltage indicies if several
         for current_loc in parameters[2]:
-            for voltage_loc in range(current_loc+1, current_loc+3):
+            for voltage_loc in range(current_loc+1, current_loc+4):
                 if voltage_loc in parameters[1]:
+                    self.log(f"Processing for current location: {current_loc}")
+                    self.log(f"and voltage location: {voltage_loc}")
+
                     sample = EIS_Sample.watch_call(
                         file_path,
                         save_path,

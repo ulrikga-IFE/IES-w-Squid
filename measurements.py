@@ -61,7 +61,6 @@ class Measurer():
         """
         admiral instruments setup      (not done in a pretty function because we need instances globally avaliable)
         """
-        print("Starting the measurment procedure")
         tracker = AisDeviceTracker.Instance()
         connection_status = tracker.connectToDeviceOnComPort("COM4")        #must manually write port
         if connection_status:
@@ -126,7 +125,6 @@ class Measurer():
                 for _ in range(self.num_picoscopes):
                     self.pico_ready.acquire()
 
-                print("resuming experiment")
                 handler.resumeExperiment(self.squid_channel)
                 
         task_p = asyncio.create_task(pico_task())
@@ -201,9 +199,7 @@ class Measurer():
             periods = 3 * freq
 
         timebase = find_timebase(freq)
-        print(f"Timebase used for {freq}Hz is: {timebase}")
         samples = int(np.ceil(sample_time(periods, freq)/((timebase-2)*20e-9)))
-        print(f"Samples for {freq}Hz: {samples}, and timebase: {timebase}")
         time_intervals = ctypes.c_float()
         returned_max_samples = ctypes.c_int32()
         print(f"sample time: {sample_time(periods, freq)}")
@@ -266,22 +262,20 @@ class Measurer():
                     if self.channels[picoscope_index, channel_index]:
                         t = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(self.results[frequency_index][picoscope_index,channel_index]))
                         fs = len(self.results[frequency_index][picoscope_index,channel_index])/sample_time(periods, self.range_of_freqs[frequency_index])
-                        print(f"length of t is: {len(t)}")
-                        #filtered_res = filter_data(self.results[frequency_index][picoscope_index,channel_index], self.range_of_freqs[frequency_index], fs)
+
                         filtered_res = self.results[frequency_index][picoscope_index,channel_index]
 
                         plt.subplot(1,2,1)
-                        plt.plot(t, filtered_res, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
+                        plt.plot(t, filtered_res, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {picoscope_index}, channel {channel_index}")
 
                         fourier = np.fft.fft(filtered_res)
                         f = np.fft.fftfreq(len(fourier))*fs
                     
                         plt.subplot(1,2,2)
-                        plt.plot(f, fourier, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {1}, channel {channel_index}")
+                        plt.plot(f, fourier, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {picoscope_index}, channel {channel_index}")
 
                 plt.legend()
                 plt.show()
-
     
     def saveData(self, frequency_index, freq, results):
         start_time = time.time()
@@ -345,10 +339,10 @@ class Measurer():
         for picoscope_index in range(self.num_picoscopes):
             for channel_index in range(4):
                 if self.channels[picoscope_index, channel_index]:
-                    if picoscope_index == 0 and channel_index == 0:
+                    if channel_index == 0:
                         save_file.write("\tCurrent (as voltage)")
                     else:
-                        save_file.write(f"\tVoltage{picoscope_index}")
+                        save_file.write(f"\tVoltage{4 * picoscope_index + channel_index}")
         save_file.write("\n")
         save_file.write("s")
 
@@ -366,7 +360,6 @@ class Measurer():
         os.rename("temp.txt", f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
         print(f"Raw data file closed after {time.time() - start_time} s.")
         #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
-
 
 #Convenience functions (sorry Sverre)
 def sample_time(periods, freq):        

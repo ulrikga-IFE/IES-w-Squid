@@ -138,7 +138,7 @@ class tkinter_class():
 
         # Equivalent circuit
         self.circuit_fit_checkbox_var = tk.IntVar()
-        self.circuit_fit_checkbox_var.set(1)
+        self.circuit_fit_checkbox_var.set(1) #Default value
         self.circuit_fit_checkbox = tk.Checkbutton(self.root, variable=self.circuit_fit_checkbox_var, onvalue=1, offvalue=0)
         self.circuit_fit_checkbox.grid(row=self.currentrow, column=1, padx=self.padx, pady=self.pady, sticky="W")
         self.circuit_fit_label = tk.Label(self.root, text="Equivalent circuit")
@@ -148,7 +148,7 @@ class tkinter_class():
         # Distribution of relaxation times
         self.currentrow += 1
         self.DRT_fit_checkbox_var = tk.IntVar()
-        self.DRT_fit_checkbox_var.set(1)
+        self.DRT_fit_checkbox_var.set(0) #Default value
         self.DRT_fit_checkbox = tk.Checkbutton(self.root, variable=self.DRT_fit_checkbox_var, onvalue=1, offvalue=0)
         self.DRT_fit_checkbox.grid(row=self.currentrow, column=1, padx=self.padx, pady=self.pady, sticky="W")
         self.DRT_fit_label = tk.Label(self.root, text="Distribution of relaxation times")
