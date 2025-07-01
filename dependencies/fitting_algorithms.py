@@ -55,6 +55,7 @@ def retrieve_data(interface):
 
             # Only running the following code if the Parameters.txt file exists
             if os.path.exists(path_to_params):
+                interface.tw.log(f"Found parameters.txt in {dir_name}")
 
 
                 # Path has been found and Parameters.txt text file is identified, now we can add all the parameters from the file to the script
@@ -72,11 +73,14 @@ def retrieve_data(interface):
                 cell_name_array     = lines[3].strip('\n').strip().split("\t").pop(1).split(',') # F.ex ['2', '3', '4', '5', '6', '7']
 
                 # Iterate throught the files within the folder, which wave been stored in the temp_files_in_watch-folder
+                interface.tw.log(f"Walking through {dir_name}")
                 path_to_files = os.path.join(interface.default_path,dir_name)
                 for root, dirs, files in os.walk(path_to_files):
                     sorting_array = []
                     # Interate through the individual files in the subdriectories
                     for filename in files:
+                        interface.tw.log(f"Working on file {filename}")
+
                         # print(f"filename = {filename}")
                         # Find files that have mmfile in the text, these are the data files
                         if "mmfile" in filename and "bak" not in filename:
@@ -135,7 +139,7 @@ def retrieve_data(interface):
 
                         split_string = params_string_individual_cell.split('_')
                         temp_df['cell_name'] = 'Cell '+ str(split_string[8])
-                        temp_df['date'] = str(datetime.strptime(params_string_individual_cell.split('_')[1][:-1], '%Y-%m-%d').date())
+                        temp_df['date'] = str(datetime.strptime(params_string_individual_cell.split('_')[1][:], '%Y-%m-%d').date())
                         temp_df['time'] = str(datetime.strptime(params_string_individual_cell.split('_')[2][:], '%H%M-%S').time())
                         temp_df['temp'] = str(split_string[4])+"\u00b0C"
                         temp_df['pressure'] = str(split_string[5]+" bar")

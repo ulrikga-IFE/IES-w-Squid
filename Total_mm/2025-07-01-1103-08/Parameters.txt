@@ -1,0 +1,9 @@
+Date:	2025-07-01
+Time:	1103-08
+
+Cell numbers:	1,2,3,4,5,6,7,8,9,10
+Area:	195
+Temperature:	50
+Pressure:	0
+DC current:	1
+AC current:	0.4

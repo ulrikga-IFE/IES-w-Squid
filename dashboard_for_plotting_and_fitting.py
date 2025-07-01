@@ -115,7 +115,7 @@ class interface():
         
         # Need to create different_tkinter_windows based on if if is opened from this file or from the button in control_main
         self.opened_from_controlmain_bool = opened_from_controlmain_bool
-        if self.opened_from_controlmain_bool == False:
+        if not self.opened_from_controlmain_bool:
             self.open_window()
 
     def open_window(self):
@@ -197,8 +197,8 @@ class interface():
         try:
             self.df= retrieve_data(self)        #
             print(f"self.df: {self.df}")
-        except:
-            e = Exception("Unable to retrieve data from directory. Make sure you select a valid folder.")
+        except Exception as error:
+            e = Exception(f"Unable to retrieve data from directory due to {error}. Make sure you select a valid folder.")
             self.tw.log(e)
             raise e
 
@@ -207,7 +207,7 @@ class interface():
             self.tw.log(e)
             raise e
         
-        try: 
+        try:
             self.update_normalize_params()
         except:
             self.tw.log("process -> update_normalize_params: Unable to update the area_size-parameter.")

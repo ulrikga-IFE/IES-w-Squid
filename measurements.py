@@ -13,6 +13,7 @@ import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter
+from scipy.fft import rfft, rfftfreq, next_fast_len
 
 class Measurer():
     def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, save_path):
@@ -80,11 +81,7 @@ class Measurer():
         for frequency_index in range(self.num_freqs):
             freq = self.range_of_freqs[frequency_index]
             geisElement = AisEISGalvanostaticElement(freq, freq, 1, self.bias, self.amplitude)
-            if freq > 10:
-                periods = freq 
-            else:
-                periods = 3 * freq 
-            print(f"Periods: {periods}")
+            periods = find_periods(freq)
             geisElement.setMinimumCycles(int(periods + 4 * freq))
     
             experiment.appendElement(geisElement, 1)
@@ -191,12 +188,7 @@ class Measurer():
         """
         Does the sampling for a single frequency. Is called once per frequency.
         """
-        if freq > 1000:
-            periods = 0.2 * freq
-        elif freq > 10:
-                periods = freq 
-        else:
-            periods = 3 * freq
+        periods = find_periods(freq)
 
         timebase = find_timebase(freq)
         samples = int(np.ceil(sample_time(periods, freq)/((timebase-2)*20e-9)))
@@ -251,12 +243,7 @@ class Measurer():
 
     def plot(self):
         for frequency_index in range(self.num_freqs):
-            if self.range_of_freqs[frequency_index] > 1000:
-                periods = self.range_of_freqs[frequency_index] * 0.2
-            elif self.range_of_freqs[frequency_index]  > 10:
-                periods = self.range_of_freqs[frequency_index]  
-            else:
-                periods = 3 * self.range_of_freqs[frequency_index]                
+            periods = find_periods(self.range_of_freqs[frequency_index])               
             for picoscope_index in range(self.num_picoscopes):
                 for channel_index in range(4):
                     if self.channels[picoscope_index, channel_index]:
@@ -268,8 +255,9 @@ class Measurer():
                         plt.subplot(1,2,1)
                         plt.plot(t, filtered_res, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {picoscope_index}, channel {channel_index}")
 
-                        fourier = np.fft.fft(filtered_res)
-                        f = np.fft.fftfreq(len(fourier))*fs
+                        fourier_length = next_fast_len(len(t))
+                        fourier = rfft(filtered_res, fourier_length)
+                        f = rfftfreq(fourier_length)*fs
                     
                         plt.subplot(1,2,2)
                         plt.plot(f, fourier, label=f"{self.range_of_freqs[frequency_index]}Hz, pico {picoscope_index}, channel {channel_index}")
@@ -279,16 +267,11 @@ class Measurer():
     
     def saveData(self, frequency_index, freq, results):
         start_time = time.time()
-        print("\nStart making raw data file:")
+        print("Start making raw data file:")
         #self.log("Start making raw data file:")
 
         lst = []
-        if freq > 1000:
-            periods = 0.2 * freq
-        elif freq > 10:
-                periods = freq 
-        else:
-            periods = 3 * freq
+        periods = find_periods(freq)
 
         time_ax = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
 
@@ -358,10 +341,10 @@ class Measurer():
         save_file.close()
 
         os.rename("temp.txt", f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
-        print(f"Raw data file closed after {time.time() - start_time} s.")
+        print(f"Raw data file closed after {time.time() - start_time} s.\n")
         #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
 
-#Convenience functions (sorry Sverre)
+#Convenience functions
 def sample_time(periods, freq):        
     return periods/freq             #[s]
 
@@ -371,6 +354,15 @@ def find_timebase(freq):
     """
     sampling_freq_multiplier = 25
     return int(np.ceil(50000000/(sampling_freq_multiplier*freq)+ 2))
+
+def find_periods(freq):
+    if freq > 1000:
+            periods = 0.2 * freq
+    elif freq > 10:
+            periods = freq 
+    else:
+        periods = 3 * freq
+    return periods
 
 def filter_data(data, freq, fs):
     mean = statistics.mean(data)

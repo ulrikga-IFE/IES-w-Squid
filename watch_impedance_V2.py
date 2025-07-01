@@ -44,6 +44,8 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from dependencies.eis_sample import EIS_Sample
 import time
+import re
+import numpy as np
 
 
 # The class that handels the folder watching and trigers when a file is created
@@ -83,7 +85,7 @@ class Watchdog(PatternMatchingEventHandler, Observer):
 
 
 class Interface:
-    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, is_last, save_final):
+    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, is_last, num_picoscopes, channels, parameters):
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
         the programs looping.
@@ -97,6 +99,9 @@ class Interface:
         self.voltage_channels = voltage_channels
         self.resistor_value = str(resistor_value)
         self.num_freqs = num_freqs
+        self.num_picoscopes = num_picoscopes
+        self.channels = channels
+        self.parameters = parameters
 
         # Tikinter set up
         self.nroot = tk.Toplevel()
@@ -149,7 +154,6 @@ class Interface:
 
         self.save_time_string = save_path
         self.is_last = is_last
-        self.save_final = save_final
 
     def make_canvases(self):
         """Creates the Canvases for the interface"""
@@ -425,7 +429,7 @@ class Interface:
         print("Stopped Watch")
         if(self.is_last):
             self.log("Processing complete")
-            self.save_final()
+            self.save_total_mm()
 
     def single_file(self):
         """
@@ -590,6 +594,125 @@ class Interface:
         self.messagebox.see(tk.END)
         self.nroot.update()
 
+    def save_total_mm(self):
+        merge_start = time.time()
+        print("\nStart merging to one .mmfile.")
+        self.log("\nStart merging to one .mmfile.")
+
+        # Make unique folder with timestamp as filename such that all measurements can be saved when run one after the other
+        parent_dir = os.path.dirname(__file__)
+        sub_path = os.path.join(parent_dir, "Total_mm")
+        path = os.path.join(sub_path, self.save_time_string)
+        os.mkdir(path) 
+
+        
+        selected_frequencies = self.parameters["selected_frequencies"].split(",")
+        
+        range_of_freqs = []
+        for frequency in selected_frequencies:
+            range_of_freqs.append(float(frequency))
+
+        # Correctly identifies channels that are used for potential measurements, and not all channels
+        for picoscope_index in range(self.num_picoscopes):
+            for channel_index in range(1,4):
+                if(self.channels[picoscope_index][channel_index]):
+                    make_file = False
+                    for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
+                        num = re.findall(r'\d+', filename)
+                        #f = os.path.join("Save_folder",filename)
+                        if int(float(num[-1])) == 4*picoscope_index + channel_index + 1:
+                            make_file=True
+
+                    # If the channel is found, it will merge all files ending in the right integer into a single .mmfile. We want this corrected to sort in order from high to low.
+                    if make_file == True:    
+                        fil = open(f"Total_mm\\{self.save_time_string}\\total_mmfile_{4*picoscope_index + channel_index + 1}.mmfile", "w")
+
+                        fil.write("Frequency\tReal\tImaginary\n")
+                        data_all = []
+                        for filename in os.listdir(f"Save_folder\\{self.save_time_string}"):
+                            num = re.findall(r'\d+', filename)
+                            f = os.path.join(f"Save_folder\\{self.save_time_string}",filename)
+                            if int(float(num[-1])) == 4*picoscope_index + channel_index + 1:
+                                tiny_file = open(f,"r")
+                                lines = tiny_file.readlines()
+                                length = len(lines)
+                                if length == 2:
+                                    line = lines[-1]
+                                    data_all.append(line + "\n")
+                                    #fil.write(line + "\n")
+                                elif length == 1:
+                                    print(f"File {f} do not have any values.")
+                                    self.log(f"File {f} do not have any values.")
+                                else:
+                                    print(f"File {f} has more than 1 line with values. The number of peaks are {length-1}. All will be added to the merged file.")
+                                    self.log(f"File {f} has more than 1 line with values. The number of peaks are {length-1}. All will be added to the merged file.")
+                                    for p in range(1,length):
+                                        line = lines[p]
+                                        data_all.append(line + "\n")
+                                        #fil.write(line + "\n")
+
+                                tiny_file.close()
+                            
+                        #contents = fil.readlines()
+                        def my_sort(line):
+                            line_fields = line.strip().split('\t')
+                            amount = float(line_fields[0])
+                            return amount
+
+                        data_all.sort(key=my_sort)
+                        f_from_FFT = []
+                        Z_values_from_FFT = []
+                        
+                        for k in range(1, len(data_all)):
+                            line_fields = data_all[k].strip().split('\t')
+                            f_from_FFT.append(float(line_fields[0]))
+                            Z_value_now = complex(float(line_fields[1]),float(line_fields[2]))
+                            Z_values_from_FFT.append(Z_value_now)
+                        
+                        # Transforming the arrays to the correctd format
+                        f_from_FFT = np.array(f_from_FFT)
+                        Z_values_from_FFT = np.array(Z_values_from_FFT)
+                        print("f_from_FFT is: " + str(f_from_FFT))
+                        print("Z_values_from_FFT is: " + str(Z_values_from_FFT))
+                        """
+                        M, mu, Z_linKK, res_real, res_imag = linKK(f_from_FFT, Z_values_from_FFT, c=.85, max_M=100, fit_type='complex', add_cap=False)
+                        print("M value is :" + str(M))
+                        print("mu value is :" + str(mu))
+                        print("Z lin kk array is :" + str(Z_linKK))
+                        print("res_real array is :" + str(res_real))
+                        print("res_imag array is :" + str(res_imag))
+                        """
+
+
+
+                        for line_index in range(len(data_all)):
+                            line = data_all[line_index]
+                            linesplit = float(line.split("\t")[0])
+                            for frequency_index in range(self.num_freqs):
+                                if abs((linesplit-float(range_of_freqs[frequency_index]))/linesplit) < 0.01:
+                            # Criteria for K-K, that the real residual is less than 10%. For now this function is basically turned off
+                            #if abs(res_real[p-1]) < 1:
+                                    fil.write(line)
+
+                        fil.close()
+                        print(f"Made .mm file for pico: {picoscope_index} channel: {channel_index}")
+            
+        # Generate the Parameters.txt file that helps for plotting
+        fil = open(f"Total_mm\\{self.save_time_string}\\Parameters.txt","w")
+
+        fil.write(f"Date:\t{self.save_time_string[:10]}\n")
+        fil.write(f"Time:\t{self.save_time_string[11:]}\n\n")
+
+        fil.write(f"Cell numbers:\t{self.parameters["cell_numbers"]}\n")
+        fil.write(f"Area:\t{self.parameters["area"]}\n")
+        fil.write(f"Temperature:\t{self.parameters["temperature"]}\n")
+        fil.write(f"Pressure:\t{self.parameters["pressure"]}\n")
+        fil.write(f"DC current:\t{self.parameters["DC_current"]}\n")
+        fil.write(f"AC current:\t{self.parameters["AC_current"]}\n")
+        fil.close()
+
+        print(f"Done creating merged .mmfile after {time.time() - merge_start} s.\n")
+        self.log(f"Done creating merged .mmfile after\n\t{(time.time() - merge_start):.2f} s.\n")
 
 if __name__ == "__main__":
     Interface()

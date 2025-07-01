@@ -237,17 +237,17 @@ class CurrentPlot:
                                               & GroupFilter(column_name="dir_name", group=dir_name)
                                               & filt) # Filter for the glyphs in the Nyquist- and Bode-plots 
                 self.cell_plots[cell_name][dir_name] = [
-                    p_nyquist.circle(x='realvalues', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name),       
+                    p_nyquist.scatter(x='realvalues', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name),       
                     [
-                        # p_bode.circle(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name + ": Magnitude"), 
-                        p_bode.circle(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name), 
+                        # p_bode.scatter(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name + ": Magnitude"), 
+                        p_bode.scatter(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name), 
                         # p_bode.line(x='frequencies', y='magnitude', source=self.cell_source, view=view, color=dir_colors[dir_name], legend_label=dir_name), 
                         # p_bode.triangle(x='frequencies', y='phase_angle', source=self.cell_source, view=view, size=7, y_range_name="phase", color=dir_colors[dir_name], legend_label=dir_name + ": Phase angle")
                         p_bode.scatter(x='frequencies', y='phase_angle', source=self.cell_source, view=view, size=7, y_range_name="phase", line_color=dir_colors[dir_name], fill_color='black', fill_alpha = 0)
                         # p_bode.line(x='frequencies', y='phase_angle', source=self.cell_source, view=view, line_dash='dashed', y_range_name="phase", color=dir_colors[dir_name], legend_label=dir_name)
                     ],
-                    p_Z_pred.circle(x='frequencies', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name),
-                    p_Z_pred_nyquist.circle(x='realvalues', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name)
+                    p_Z_pred.scatter(x='frequencies', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name),
+                    p_Z_pred_nyquist.scatter(x='realvalues', y='imaginaryvalues', source=self.cell_source, view=view, size=7, color=dir_colors[dir_name], legend_label=dir_name)
                 ]
 
 
@@ -313,7 +313,7 @@ class CurrentPlot:
                     self.impedance_from_fitting_plots[cell_name][dir_name] = [
                         p_nyquist.line(x='impedance_real', y='impedance_imag', source=filtered_imp_source, view = impedance_view, color=dir_colors[dir_name], line_width=2, line_dash='dashed'),
                         [
-                        # p_bode.circle(x='frequencies', y='magnitude', source=filtered_imp_source, view=impedance_view, size=7, color=dir_colors[dir_name], legend_label=cell_name), 
+                        # p_bode.scatter(x='frequencies', y='magnitude', source=filtered_imp_source, view=impedance_view, size=7, color=dir_colors[dir_name], legend_label=cell_name), 
                         p_bode.line(x='frequencies', y='magnitude', source=filtered_imp_source, view=impedance_view, color=dir_colors[dir_name]), 
                         # p_bode.triangle(x='frequencies', y='phase_angle', source=filtered_imp_source, view=impedance_view, size=7, y_range_name="phase", color=dir_colors[dir_name], legend_label=cell_name), 
                         p_bode.line(x='frequencies', y='phase_angle', source=filtered_imp_source, view=impedance_view, line_dash='dashed', y_range_name="phase", color=dir_colors[dir_name])
@@ -371,7 +371,7 @@ class CurrentPlot:
 
                             # Glyph with the resistance-value
                             resistance_plots[base_variable] = [
-                                p_resistance.circle(x='hours_since_first_date', y=base_variable, source=self.circuit_source, view=resistance_view, size=7, color=resistance_colors[base_variable], legend_label=base_variable), 
+                                p_resistance.scatter(x='hours_since_first_date', y=base_variable, source=self.circuit_source, view=resistance_view, size=7, color=resistance_colors[base_variable], legend_label=base_variable), 
                                 error
                             ]
 
@@ -402,14 +402,14 @@ class CurrentPlot:
 
                             # Glyph with the capasitance-value
                             capacitance_plots[base_variable] = [
-                                p_capacitance.circle(x='hours_since_first_date', y=base_variable, source=self.circuit_source, view=capacitance_view, size=7, color=capacitance_colors[base_variable], legend_label=base_variable),
+                                p_capacitance.scatter(x='hours_since_first_date', y=base_variable, source=self.circuit_source, view=capacitance_view, size=7, color=capacitance_colors[base_variable], legend_label=base_variable),
                                 error
                             ]
 
                         # If base variable is related to time -> append to time-plot
                         elif base_variable in self.TIME_SELECTOR_LABEL:
                             time_plots[base_variable] = []
-                            time_plots[base_variable] = p_time.circle(x='hours_since_first_date', y='char_freq' + base_variable[-1], source=self.circuit_source, view=time_view, size=7, color=time_colors[base_variable], legend_label="f_char " + base_variable[-1])
+                            time_plots[base_variable] = p_time.scatter(x='hours_since_first_date', y='char_freq' + base_variable[-1], source=self.circuit_source, view=time_view, size=7, color=time_colors[base_variable], legend_label="f_char " + base_variable[-1])
                     self.circuit_plots[cell_name][dir_name] = []
                     self.circuit_plots[cell_name][dir_name].append(resistance_plots)
                     self.circuit_plots[cell_name][dir_name].append(capacitance_plots)
@@ -448,12 +448,12 @@ class CurrentPlot:
                     exp_data = self.df.loc[(self.df["dir_name"] == dir_name) & (self.df["cell_name"] == cell_name) ,"imaginaryvalues"].tolist()
                     DRT_model_eval_plots[dir_name] = [
                         p_model_eval.line('freq_vec_star', 'Z_imag_star', source=filtered_source, line_width=4, color=dir_colors[dir_name], legend_label=dir_name),
-                        p_model_eval.circle(x=freq_vec, y=exp_data, color=dir_colors[dir_name], size=7, legend_label=dir_name)
+                        p_model_eval.scatter(x=freq_vec, y=exp_data, color=dir_colors[dir_name], size=7, legend_label=dir_name)
                     ]
                     Z_real = self.df.loc[(self.df["dir_name"] == dir_name) & (self.df['cell_name'] == cell_name), 'realvalues'].tolist()
                     DRT_nyquist_plots[dir_name] = [
                         p_model_nyquist.line('Z_real_star', 'Z_imag_star', source=filtered_source, line_width=4, color=dir_colors[dir_name], legend_label=dir_name),
-                        p_model_nyquist.circle(x=Z_real, y=exp_data, size=7, color=dir_colors[dir_name], legend_label=dir_name)
+                        p_model_nyquist.scatter(x=Z_real, y=exp_data, size=7, color=dir_colors[dir_name], legend_label=dir_name)
                     ]
 
                     renderers_lines_list.append(DRT_time_plots[dir_name][1])
@@ -483,7 +483,7 @@ class CurrentPlot:
             label_elem2.visible = False
             label_elem3 = p_bode.line(x='frequencies', y='phase_angle', source=self.impedance_from_fitting_source, line_dash='dashed', color='darkgrey', line_width=2, legend_label="Circuit fit: Phase angle")
             label_elem3.visible = False
-        label_elem4 = p_bode.circle(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color='darkgrey', legend_label='Magnitude')
+        label_elem4 = p_bode.scatter(x='frequencies', y='magnitude', source=self.cell_source, view=view, size=7, color='darkgrey', legend_label='Magnitude')
         label_elem4.visible = False
         label_elem5 = p_bode.scatter(x='frequencies', y='phase_angle', source=self.cell_source, view=view, size=7, y_range_name="phase", line_color='darkgrey', fill_color='black', fill_alpha = 0, legend_label='Phase angle')
         label_elem5.visible = False
