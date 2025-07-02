@@ -8,13 +8,15 @@ from PySide6.QtWidgets import QApplication
 import sys
 import asyncio
 import qasync
+import time
+from math import log10
 
-import GUI
-import measurements
-import watch_impedance_V2
+import EIS_GUI
+import EIS_experiment
+import data_processor
 import dashboard_for_plotting_and_fitting as fitting_dash
 
-class EIS_experiment_main:
+class EIS_main:
     def __init__(self):
         scopes = tk.simpledialog.askstring(title="Picoscopes",prompt="How many picoscopes?")
         self.num_picoscopes = int(float(scopes))
@@ -26,26 +28,37 @@ class EIS_experiment_main:
             for channel_index in range(4):
                 self.channels[picoscope_index,channel_index] = int(float(chn_diag[channel_index]))
 
-        self.gui = GUI.GUI(self.num_picoscopes, self.channels, self.start_measurements, self.open_fitting)
+        self.gui = EIS_GUI.EIS_GUI(self.num_picoscopes, self.channels, self.start_and_process_measurements, self.open_fitting, self.open_processing)
         self.gui.root.mainloop()
-
-    def start_measurements(self):
+        
+    def start_and_process_measurements(self):
         self.gui.log("Starting measurements")
 
         parameters, constants = self.gui.collect_parameters()
 
-        selected_frequencies = parameters["selected_frequencies"].split(",")
-        
-        range_of_freqs = []
-        for frequency in selected_frequencies:
-            range_of_freqs.append(float(frequency))
+        if self.gui.manual_freq_check.get():
+            selected_frequencies = parameters["selected_frequencies"].split(",")
+            range_of_freqs = []
+            for frequency in selected_frequencies:
+                range_of_freqs.append(float(frequency))
+            num_freqs = len(range_of_freqs)
+        else:
+            max_freq = float(parameters["max_frequency"])
+            min_freq = float(parameters["min_frequency"])
+            steps_per_decade = int(parameters["steps_per_decade"])
+            
+            num_decades = log10(max_freq) - log10(min_freq)
+            num_freqs = int(num_decades) * steps_per_decade
+            range_of_freqs = np.logspace(log10(max_freq), log10(min_freq), num=num_freqs, endpoint=True, base=10)
 
         bias = float(parameters["DC_current"])
         amplitude = bias * float(parameters["AC_current"])
 
-        self.date_today = datetime.today().strftime("%Y-%m-%d-")
-        self.time_now = datetime.now().strftime("%H%M-%S")
-        time_path = self.date_today + self.time_now
+        sleep_time = float(parameters["sleep_time"])
+
+        date_today = datetime.today().strftime("%Y-%m-%d-")
+        time_now = datetime.now().strftime("%H%M-%S")
+        time_path = date_today + time_now
         
         save_path = f"Raw_data\\{time_path}"
     
@@ -54,32 +67,32 @@ class EIS_experiment_main:
         if do_experiment:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-
+            
             pool = Pool(processes=1)
-            pool.apply_async(self.do_experiment, [self.num_picoscopes, self.channels, range_of_freqs, bias, amplitude, constants, parameters, time_path])
+            pool.apply_async(self.do_experiment, [self.num_picoscopes, self.channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path])
 
-            do_process_data = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to immediately process the measurements?")
-            if do_process_data:
+            if self.gui.process_data_check.get():
                 processed_path = f"Save_folder\\{time_path}"
                 if not os.path.exists(processed_path):
                     os.makedirs(processed_path)
 
                 resistor_value = parameters["resistor_value"]
 
-                self.process_data(resistor_value, len(range_of_freqs), time_path, parameters)
+                self.process_data(resistor_value, num_freqs, time_path, parameters)
 
     @staticmethod
-    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path):
+    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path):
 
         app = QApplication(sys.argv)
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
-        measurer = measurements.Measurer(num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, time_path)
+        experiment = EIS_experiment.EIS_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path)
 
         with loop:
-            loop.run_until_complete(measurer.measure())
+            loop.run_until_complete(experiment.perform_experiment())
         app.quit()
-        #measurer.plot()    
+
+        experiment.plot()
 
     def process_data(self, resistor_value, num_freqs, save_path, parameters):
         counter = 1
@@ -96,7 +109,8 @@ class EIS_experiment_main:
         voltage_channels_watch_imp = voltage_channels_watch_imp[1:]
         print("Current channels used: " + current_channels_watch_imp)
         print("Voltage channels used: "+ voltage_channels_watch_imp)
-        watcher = watch_impedance_V2.Interface(current_channels_watch_imp,
+
+        processor = data_processor.Data_processor(current_channels_watch_imp,
                                                 voltage_channels_watch_imp,
                                                 resistor_value,
                                                 num_freqs,
@@ -105,7 +119,41 @@ class EIS_experiment_main:
                                                 self.num_picoscopes,
                                                 self.channels,
                                                 parameters)
-        watcher.start_watch()
+        time.sleep(1)
+        processor.start_processing()
+
+    def open_processing(self):
+        parameters, _ = self.gui.collect_parameters()
+        resistor_value = parameters["resistor_value"]
+        num_freqs =  len(parameters["selected_frequencies"].split(","))
+        date_today = datetime.today().strftime("%Y-%m-%d-")
+        time_now = datetime.now().strftime("%H%M-%S")
+        save_path = date_today + time_now
+
+        counter = 1
+        current_channels_watch_imp = ""
+        voltage_channels_watch_imp = ""
+        for picoscope_index in range(self.num_picoscopes):
+            current_channels_watch_imp += "," +str(counter)
+            counter += 1
+            for channel_index in range(1,4):
+                if self.channels[picoscope_index,channel_index]:
+                    voltage_channels_watch_imp += ","+str(counter)
+                    counter += 1
+        current_channels_watch_imp = current_channels_watch_imp[1:]
+        voltage_channels_watch_imp = voltage_channels_watch_imp[1:]
+        print("Current channels used: " + current_channels_watch_imp)
+        print("Voltage channels used: "+ voltage_channels_watch_imp)
+
+        data_processor.Data_processor(current_channels_watch_imp,
+                                                voltage_channels_watch_imp,
+                                                resistor_value,
+                                                num_freqs,
+                                                save_path,
+                                                picoscope_index==(self.num_picoscopes-1),
+                                                self.num_picoscopes,
+                                                self.channels,
+                                                parameters)
 
     def open_fitting(self):
         self.gui.log("Opening fitting window")
@@ -125,4 +173,4 @@ if __name__ == "__main__":
         else:
             print(f"Folder '{folder_name}' already exists in {current_directory}.")
             
-    EIS_experiment_main()
+    EIS_main()

@@ -1,9 +1,10 @@
 import asyncio
 from picosdk.ps4000a import ps4000a as ps
 from picosdk.functions import adc2mV, assert_pico_ok
-from SquidstatPyLibrary import AisDeviceTracker
-from SquidstatPyLibrary import AisExperiment
-from SquidstatPyLibrary import AisEISGalvanostaticElement
+from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisConstantCurrentElement, AisEISGalvanostaticElement
+from PySide6.QtWidgets import QApplication
+import qasync
+import sys
 import ctypes
 import numpy as np
 import time
@@ -15,8 +16,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter
 from scipy.fft import rfft, rfftfreq, next_fast_len
 
-class Measurer():
-    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, constants, parameters, save_path):
+class EIS_experiment():
+    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, save_path):
         self.start_time = time.time()
 
         self.num_picoscopes = num_picoscopes
@@ -26,6 +27,7 @@ class Measurer():
         self.num_freqs = len(self.range_of_freqs)
         self.bias = bias
         self.amplitude = amplitude
+        self.sleep_time = sleep_time
         self.constants = constants
         self.parameters = parameters
         self.save_path = save_path
@@ -39,14 +41,17 @@ class Measurer():
         self.admiral_ready = asyncio.Event()
         self.admiral_started_event = asyncio.Event()
 
-    async def measure(self):
+    async def perform_experiment(self):
 
         def device_connected_signal():
             print("Connection signal received")
 
         def new_element_signal(stepnumber):
-            print(f"Admiral ready to start {self.range_of_freqs[stepnumber-1]}Hz")
-            handler.pauseExperiment(self.squid_channel)
+            if stepnumber == 1 or stepnumber > self.num_freqs + 1:
+                print(f"Admiral sleeping for {self.sleep_time} seconds")
+            else:
+                print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
+                handler.pauseExperiment(self.squid_channel)
 
         def element_paused():
             self.admiral_ready.set()
@@ -77,14 +82,18 @@ class Measurer():
 
         #build experiment:
         experiment = AisExperiment()
+        
+        constant_element = AisConstantCurrentElement(self.bias, self.sleep_time, self.sleep_time)
 
+        experiment.appendElement(constant_element, 1)
         for frequency_index in range(self.num_freqs):
             freq = self.range_of_freqs[frequency_index]
-            geisElement = AisEISGalvanostaticElement(freq, freq, 1, self.bias, self.amplitude)
+            geis_element = AisEISGalvanostaticElement(freq, freq, 1, self.bias, self.amplitude)
             periods = find_periods(freq)
-            geisElement.setMinimumCycles(int(periods + 4 * freq))
+            geis_element.setMinimumCycles(int(periods + 4 * freq))
     
-            experiment.appendElement(geisElement, 1)
+            experiment.appendElement(geis_element, 1) 
+        experiment.appendElement(constant_element, 1)
 
         uploading_status = handler.uploadExperimentToChannel(self.squid_channel,experiment)     #uploading the experiment onto a channel where it can be run
         if uploading_status:
@@ -226,9 +235,13 @@ class Measurer():
                     unfiltered_results = np.asarray(adc2mV(self.bufferMax[picoscope_index][channel_index],
                                                         self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
                                                         self.constants["maxADC"]))        #transforming data in buffer into readable mV data
+
                     freq_results[picoscope_index, channel_index] = filter_data(unfiltered_results, freq, fs)
+
         except Exception as exc:
-            print(exc)
+            print(f"Exception in collecting and filtering data: {exc}", flush=True)
+            raise(exc)
+        
         return freq_results
 
     def pico_close(self):
@@ -267,82 +280,84 @@ class Measurer():
     
     def saveData(self, frequency_index, freq, results):
         start_time = time.time()
-        print("Start making raw data file:")
-        #self.log("Start making raw data file:")
+        print("Start making raw data file:", flush=True)
+        try:
 
-        lst = []
-        periods = find_periods(freq)
+            lst = []
+            periods = find_periods(freq)
 
-        time_ax = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
+            time_ax = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
 
-        for k in range(len(time_ax)):                                                    
-            lst.append(str(time_ax[k]))
+            for k in range(len(time_ax)):                                                    
+                lst.append(str(time_ax[k]))
+                for picoscope_index in range(self.num_picoscopes):
+                    for channel_index in range(4):
+                        if self.channels[picoscope_index,channel_index]:
+                            lst.append("\t"+str(results[picoscope_index, channel_index][k]))
+                lst.append("\n")
+
+            
+            save_file = open("temp.txt","x")
+
+            save_file.write("Date: \t" + datetime.today().strftime("%Y-%m-%d-") + "\n")
+            save_file.write("Time: \t" + datetime.now().strftime("%H%M-%S") + "\n\n")
+            picoscope_string = str()
             for picoscope_index in range(self.num_picoscopes):
                 for channel_index in range(4):
-                    if self.channels[picoscope_index,channel_index]:
-                        lst.append("\t"+str(results[picoscope_index, channel_index][k]))
-            lst.append("\n")
+                    if int(self.channels[picoscope_index, channel_index]) == 1:
+                        picoscope_string += str(1)
+                    else:
+                        picoscope_string += str(0)
 
-        
-        save_file = open("temp.txt","x")
-
-        save_file.write("Date: \t" + datetime.today().strftime("%Y-%m-%d-") + "\n")
-        save_file.write("Time: \t" + datetime.now().strftime("%H%M-%S") + "\n\n")
-        picoscope_string = str()
-        for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(4):
-                if int(self.channels[picoscope_index, channel_index]) == 1:
-                    picoscope_string += str(1)
-                else:
+            if float(len(picoscope_string)) < 40:
+                for picoscope_index in range(len(picoscope_string), 40, 1):
                     picoscope_string += str(0)
+            # NOT TESTED
 
-        if float(len(picoscope_string)) < 40:
-            for picoscope_index in range(len(picoscope_string), 40, 1):
-                picoscope_string += str(0)
-        # NOT TESTED
+            save_file.write("Picoscope code: \t" + str(picoscope_string) + "\n\n")
+            save_file.write("Max potential (current channel) [V]: \t" + str(self.parameters["max_potential_channel"])+ "\n")
+            save_file.write("Max stack potential [V]: \t" + str(self.parameters["max_potential_stack"]) + "\n")
+            save_file.write("Max cell potential [V]: \t" + str(self.parameters["max_potential_cell"]) + "\n\n")
+            save_file.write("Cell numbers: \t" + str(self.parameters["cell_numbers"])+ "\n")
+            save_file.write("Area [cm2]: \t" + str(self.parameters["area"])+ "\n")
+            save_file.write("Temperature [degC]: \t" + str(self.parameters["temperature"])+ "\n")
+            save_file.write("Pressure [bar]: \t" + str(self.parameters["pressure"])+ "\n")
+            save_file.write("DC current [A]: \t" + str(self.parameters["DC_current"])+ "\n")
+            save_file.write("AC current [in pct of DC current]: \t" + str(self.parameters["AC_current"])+ "\n")
+            save_file.write("Shunt: \t" + str(self.parameters["shunt"])+ "\n\n")
 
-        save_file.write("Picoscope code: \t" + str(picoscope_string) + "\n\n")
-        save_file.write("Max potential (current channel) [V]: \t" + str(self.parameters["max_potential_channel"])+ "\n")
-        save_file.write("Max stack potential [V]: \t" + str(self.parameters["max_potential_stack"]) + "\n")
-        save_file.write("Max cell potential [V]: \t" + str(self.parameters["max_potential_cell"]) + "\n\n")
-        save_file.write("Cell numbers: \t" + str(self.parameters["cell_numbers"])+ "\n")
-        save_file.write("Area [cm2]: \t" + str(self.parameters["area"])+ "\n")
-        save_file.write("Temperature [degC]: \t" + str(self.parameters["temperature"])+ "\n")
-        save_file.write("Pressure [bar]: \t" + str(self.parameters["pressure"])+ "\n")
-        save_file.write("DC current [A]: \t" + str(self.parameters["DC_current"])+ "\n")
-        save_file.write("AC current [in pct of DC current]: \t" + str(self.parameters["AC_current"])+ "\n")
-        save_file.write("Shunt: \t" + str(self.parameters["shunt"])+ "\n\n")
+            #removes ability to run without pstat, but lowkey then just run the old program?
+            input_value = "N"
+            save_file.write("Run without potentiostat [Y/N]: \t" + str(input_value) + "\n")
+            save_file.write("Frequencies selected: \t" + str(self.range_of_freqs)+ "\n")               
+            save_file.write("\n")
+            save_file.write("Time")
+            for picoscope_index in range(self.num_picoscopes):
+                for channel_index in range(4):
+                    if self.channels[picoscope_index, channel_index]:
+                        if channel_index == 0:
+                            save_file.write("\tCurrent (as voltage)")
+                        else:
+                            save_file.write(f"\tVoltage{4 * picoscope_index + channel_index}")
+            save_file.write("\n")
+            save_file.write("s")
 
-        #removes ability to run without pstat, but lowkey then just run the old program?
-        input_value = "N"
-        save_file.write("Run without potentiostat [Y/N]: \t" + str(input_value) + "\n")
-        save_file.write("Frequencies selected: \t" + str(self.range_of_freqs)+ "\n")               
-        save_file.write("\n")
-        save_file.write("Time")
-        for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(4):
-                if self.channels[picoscope_index, channel_index]:
-                    if channel_index == 0:
-                        save_file.write("\tCurrent (as voltage)")
-                    else:
-                        save_file.write(f"\tVoltage{4 * picoscope_index + channel_index}")
-        save_file.write("\n")
-        save_file.write("s")
+            for picoscope_index in range(self.num_picoscopes):
+                for channel_index in range(4):
+                    if self.channels[picoscope_index, channel_index]:
+                        if picoscope_index == 0 and channel_index == 0:
+                            save_file.write("\tmV")
+                        else:
+                            save_file.write("\tmV")
+            save_file.write("\n\n")
+            save_file.writelines(lst)
+            save_file.close()
 
-        for picoscope_index in range(self.num_picoscopes):
-            for channel_index in range(4):
-                if self.channels[picoscope_index, channel_index]:
-                    if picoscope_index == 0 and channel_index == 0:
-                        save_file.write("\tmV")
-                    else:
-                        save_file.write("\tmV")
-        save_file.write("\n\n")
-        save_file.writelines(lst)
-        save_file.close()
-
-        os.rename("temp.txt", f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
-        print(f"Raw data file closed after {time.time() - start_time} s.\n")
-        #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
+            os.rename("temp.txt", f"Raw_data\\{self.save_path}\\freq{self.range_of_freqs[frequency_index]}Hz.txt")
+            print(f"Raw data file closed after {time.time() - start_time} s.\n")
+            #self.log(f"Raw data file closed after\n\t{(time.time() - start_time):.2f} s.")
+        except Exception as e:
+            print(f"Exception in creating file: {e}")
 
 #Convenience functions
 def sample_time(periods, freq):        
@@ -357,27 +372,25 @@ def find_timebase(freq):
 
 def find_periods(freq):
     if freq > 1000:
-            periods = 0.2 * freq
+            periods = 890 + 0.111 * freq
     elif freq > 10:
             periods = freq 
     else:
         periods = 3 * freq
+        
     return periods
 
 def filter_data(data, freq, fs):
+    filtered_data = data
     mean = statistics.mean(data)
     filtered_data = data - mean
     filtered_data = butter_lowpass_filter(filtered_data, [0.25*freq, 4*freq], fs, order=4)
     return filtered_data
 
-def butter_lowpass(cutOff, fs, order=5):
+def butter_lowpass_filter(data, cutOff, fs, order=4):
     nyq = 0.5*fs
     normalCutoff = [cutOff[0] / nyq,  cutOff[1] /nyq]
     b, a = butter(order, normalCutoff, btype='bandpass', analog = False)
-    return b, a
-
-def butter_lowpass_filter(data, cutOff, fs, order=4):
-    b, a = butter_lowpass(cutOff, fs, order=order)
     y = lfilter(b, a, data)
     return y
 
@@ -385,3 +398,41 @@ def butter_lowpass_filter(data, cutOff, fs, order=4):
 """Notes:
 - Currently saves data *twice* in order to interface with watch impedance. Optimally would just read the correct lines from the saved data, not save it twice
 """
+
+if __name__ == "__main__":
+    channels = np.array([[1,1,1,1],[1,1,1,0]])
+    range_of_freqs = [1000, 100, 10, 1]
+
+    constants = {
+                    "timeIntervalns" : ctypes.c_float(),
+                    "returnedMaxSamples" : ctypes.c_int32(),
+                    "overflow" : ctypes.c_int16(),                                # create overflow location
+                    "maxADC" : ctypes.c_int16(32767),                             # find maximum ADC count value
+                    "currentRange" : int(float(10)),
+                    "stackPotentialRange" : int(float(10)),
+                    "cellPotentialRange" : int(float(10)),
+                          }
+    
+    parameters = { 
+                "max_potential_channel" : str(20),
+                "max_potential_stack" : str(20),
+                "max_potential_cell" : str(20),
+                "cell_numbers" : str(),
+                "area" : str(),
+                "temperature" : str(),
+                "pressure" : str(),
+                "DC_current" : str(1),
+                "AC_current" : str(0.4),
+                "shunt" : str(1),
+                "selected_frequencies" : str(range_of_freqs)
+                }
+
+    measurer = EIS_experiment(2, channels, range_of_freqs, 1, 0.4, constants, parameters, "Raw_data")
+
+    app = QApplication(sys.argv)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    with loop:
+        loop.run_until_complete(measurer.perform_experiment())
+    app.quit()

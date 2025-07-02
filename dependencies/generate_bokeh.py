@@ -24,7 +24,7 @@ import numpy as np
 from datetime import datetime, timedelta # For sorting dates
 
 from typing import Iterable
-import GUI
+import EIS_GUI
 import tkinter as tk
 from tkinter import filedialog
 from shutil import rmtree

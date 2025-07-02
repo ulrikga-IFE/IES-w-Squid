@@ -36,7 +36,6 @@ The V2 version differs from the first in that i is changed to better fit with th
 Based on watch_impedance.py by Christoffer Askvik Faugstad (christoffer.askvik.faugstad@hotmail.com)
 """
 import os
-from typing import Iterable
 import dependencies.GUI_helper as GUI_helper
 import tkinter as tk
 from shutil import rmtree
@@ -56,7 +55,7 @@ class Watchdog(PatternMatchingEventHandler, Observer):
     for updates and if a file is created is calls the on_created function.
     """
 
-    def __init__(self, path=".", patterns=("*.txt",), logfunc=print, created=None):
+    def __init__(self, path=".", patterns=("*.txt",), logfunc=print, detected_file=None):
         """
         Parameters:
         ----------
@@ -77,14 +76,14 @@ class Watchdog(PatternMatchingEventHandler, Observer):
         Observer.__init__(self)
         self.schedule(self, path=path, recursive=False)
         self.log = logfunc
-        self.created = created
+        self.created = detected_file
 
     def on_created(self, event):
-        # This function is called when a file is created
+        print(f"\nWatchdog detected {event.src_path}\n")
         self.created(event.src_path)
 
 
-class Interface:
+class Data_processor:
     def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, is_last, num_picoscopes, channels, parameters):
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
@@ -201,7 +200,7 @@ class Interface:
         tk.Button(
             self.nroot,
             text="Start watch",
-            command=self.start_watch,
+            command=self.start_processing,
             width=self.BUTTON_WIDTH_CHARACTERS,
             height=self.BUTTON_HEIGHT_CHARACTERS,
         ).place(x=2 * self.FIGL_PIXELS, y=self.BUTTON_HEIGHT_PIXELS * butt_num)
@@ -209,7 +208,7 @@ class Interface:
         tk.Button(
             self.nroot,
             text="Stop Watch",
-            command=self.stop_watch,
+            command=self.stop_processing,
             width=self.BUTTON_WIDTH_CHARACTERS,
             height=self.BUTTON_HEIGHT_CHARACTERS,
         ).place(x=2 * self.FIGL_PIXELS, y=self.BUTTON_HEIGHT_PIXELS * butt_num)
@@ -344,7 +343,7 @@ class Interface:
         self.fullScreenState = False
         self.nroot.attributes("-fullscreen", self.fullScreenState)
 
-    def start_watch(self):
+    def start_processing(self):
         """
         When
         ----------
@@ -375,7 +374,7 @@ class Interface:
             self.watchdog = Watchdog(
                 path=self.watch_path,
                 logfunc=self.log,
-                created=lambda file_path: self.created(self.save_path, file_path),
+                detected_file=lambda file_path: self.detected_file(self.save_path, file_path),
             )
             self.watchdog.start()
             self.log("Watch started")
@@ -395,13 +394,13 @@ class Interface:
                 "Starting to process existing files present in watch path and not in save path."
             )
             for i, file_path in enumerate(file_paths_in_watch):
-                self.created(self.save_path, file_path)
+                self.detected_file(self.save_path, file_path)
                 self.log(f"Done with {i+1} of {len(file_paths_in_watch)}")
             self.log("Finished processing existing files.")
         else:
             self.log("Watch already started")
 
-    def stop_watch(self):
+    def stop_processing(self):
         """
         When
         ----------
@@ -462,12 +461,12 @@ class Interface:
             if file_path[-4:] == ".txt":
                 if not os.path.exists(save_path):
                     os.mkdir(save_path)
-                self.created(save_path, file_path)
+                self.detected_file(save_path, file_path)
                 rmtree(save_path)
         else:
             self.log("Watch activated, turn of to use single file.")
 
-    def created(self, save_path, file_path):
+    def detected_file(self, save_path, file_path):
         """
         Parameters:
         ----------
@@ -491,8 +490,8 @@ class Interface:
         the figures (nyquist, bode and fft_spectrum).
         """
         # Logging that a file is found
-        self.log(f"Detected the file\n {os.path.basename(file_path)}")
         print(f"Detected the file\n {os.path.basename(file_path)}")
+        self.log(f"Detected the file\n {os.path.basename(file_path)}")
         # Due to the fact that the operation system, has the files open
         # the program waits a second to let the file be cloed by the OS.
         frequency_now = float(os.path.basename(file_path).split("freq")[1].split("Hz.txt")[0])
@@ -552,7 +551,7 @@ class Interface:
                     
         self.files_processed += 1
         if self.files_processed ==  self.num_freqs:
-            self.stop_watch()
+            self.stop_processing()
 
     def select_path(self,save_path):
         """Helper function to select input folder/directory, called by Browse watch button"""
@@ -588,11 +587,14 @@ class Interface:
         Does:
         --------
         Writes the message to the messagebox and makes a newline after
-        the message, allso calls the nroot.updete method.
+        the message, allso calls the nroot.update method.
         """
-        self.messagebox.insert(tk.END, f"{message}\n")
-        self.messagebox.see(tk.END)
-        self.nroot.update()
+        try:
+            self.messagebox.insert(tk.END, f"{message}\n")
+            self.messagebox.see(tk.END)
+            self.nroot.update()
+        except Exception as e:
+            print(f"Detected exception: {e}")
 
     def save_total_mm(self):
         merge_start = time.time()
@@ -715,4 +717,28 @@ class Interface:
         self.log(f"Done creating merged .mmfile after\n\t{(time.time() - merge_start):.2f} s.\n")
 
 if __name__ == "__main__":
-    Interface()
+    current_channels = [1,5]
+    voltage_channels = [2,3,4,6,7]
+    channels = np.array([[1,1,1,1],[1,1,1,0]])
+
+
+    range_of_freqs = [1000, 100, 10, 1]
+
+
+    parameters = { 
+            "max_potential_channel" : str(20),
+            "max_potential_stack" : str(20),
+            "max_potential_cell" : str(20),
+            "cell_numbers" : str(),
+            "area" : str(),
+            "temperature" : str(),
+            "pressure" : str(),
+            "DC_current" : str(1),
+            "AC_current" : str(0.4),
+            "shunt" : str(1),
+            "selected_frequencies" : str(range_of_freqs)
+            }
+    save_path = os.listdir("Save_folder")[0]
+
+    processor = Data_processor(current_channels, voltage_channels, 1, 4, save_path, 1, 2, channels, parameters)
+    processor.nroot.mainloop()
