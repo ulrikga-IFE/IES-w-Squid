@@ -36,6 +36,15 @@ class EIS_main:
 
         parameters, constants = self.gui.collect_parameters()
 
+        num_channels = 0
+        for picoscop_index in range(self.num_picoscopes):
+            for channel_index in range(4):
+                num_channels += self.channels[picoscop_index, channel_index]
+
+        if len(parameters["cell_numbers"].split(",")) != num_channels - self.num_picoscopes:
+            self.gui.log("Error: must have the same number of cells as voltage channels")
+            return
+
         if self.gui.manual_freq_check.get():
             selected_frequencies = parameters["selected_frequencies"].split(",")
             range_of_freqs = []
@@ -51,8 +60,15 @@ class EIS_main:
             num_freqs = int(num_decades) * steps_per_decade
             range_of_freqs = np.logspace(log10(max_freq), log10(min_freq), num=num_freqs, endpoint=True, base=10)
 
+            selected_frequencies = ""
+            for frequency in range_of_freqs:
+                selected_frequencies = selected_frequencies + str(frequency) + ","
+            selected_frequencies = selected_frequencies[:-1]
+            parameters["selected_frequencies"] = selected_frequencies
+                
         bias = float(parameters["DC_current"])
         amplitude = bias * float(parameters["AC_current"])
+        low_freq_periods = float(parameters["low_freq_periods"])
 
         sleep_time = float(parameters["sleep_time"])
 
@@ -69,7 +85,7 @@ class EIS_main:
                 os.makedirs(save_path)
             
             pool = Pool(processes=1)
-            pool.apply_async(self.do_experiment, [self.num_picoscopes, self.channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path])
+            pool.apply_async(self.do_experiment, [self.num_picoscopes, self.channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path])
 
             if self.gui.process_data_check.get():
                 processed_path = f"Save_folder\\{time_path}"
@@ -81,12 +97,12 @@ class EIS_main:
                 self.process_data(resistor_value, num_freqs, time_path, parameters)
 
     @staticmethod
-    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path):
+    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path):
 
         app = QApplication(sys.argv)
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
-        experiment = EIS_experiment.EIS_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, time_path)
+        experiment = EIS_experiment.EIS_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path)
 
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
@@ -115,7 +131,6 @@ class EIS_main:
                                                 resistor_value,
                                                 num_freqs,
                                                 save_path,
-                                                picoscope_index==(self.num_picoscopes-1),
                                                 self.num_picoscopes,
                                                 self.channels,
                                                 parameters)
@@ -150,7 +165,6 @@ class EIS_main:
                                                 resistor_value,
                                                 num_freqs,
                                                 save_path,
-                                                picoscope_index==(self.num_picoscopes-1),
                                                 self.num_picoscopes,
                                                 self.channels,
                                                 parameters)

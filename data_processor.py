@@ -79,12 +79,11 @@ class Watchdog(PatternMatchingEventHandler, Observer):
         self.created = detected_file
 
     def on_created(self, event):
-        print(f"\nWatchdog detected {event.src_path}\n")
         self.created(event.src_path)
 
 
 class Data_processor:
-    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, is_last, num_picoscopes, channels, parameters):
+    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, num_picoscopes, channels, parameters):
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
         the programs looping.
@@ -152,7 +151,6 @@ class Data_processor:
         self.select_save_path(save_path)
 
         self.save_time_string = save_path
-        self.is_last = is_last
 
     def make_canvases(self):
         """Creates the Canvases for the interface"""
@@ -425,10 +423,9 @@ class Data_processor:
             self.log("Watch stopped")
         else:
             self.log("Watch is already not running")
-        print("Stopped Watch")
-        if(self.is_last):
-            self.log("Processing complete")
-            self.save_total_mm()
+
+        self.log(f"Processing complete at {time.time()}")
+        self.save_total_mm()
 
     def single_file(self):
         """
@@ -490,14 +487,12 @@ class Data_processor:
         the figures (nyquist, bode and fft_spectrum).
         """
         # Logging that a file is found
-        print(f"Detected the file\n {os.path.basename(file_path)}")
         self.log(f"Detected the file\n {os.path.basename(file_path)}")
         # Due to the fact that the operation system, has the files open
         # the program waits a second to let the file be cloed by the OS.
         frequency_now = float(os.path.basename(file_path).split("freq")[1].split("Hz.txt")[0])
         self.log(f"Frequency now is: {frequency_now} Hz")
-        print(f"Frequency now is: {frequency_now} Hz")
-        time.sleep(1)
+
         # getting the parameters from the inboxes
         parameters = self.get_inbox_values()
         if self.applyfilter.get() == 1:
@@ -598,7 +593,6 @@ class Data_processor:
 
     def save_total_mm(self):
         merge_start = time.time()
-        print("\nStart merging to one .mmfile.")
         self.log("\nStart merging to one .mmfile.")
 
         # Make unique folder with timestamp as filename such that all measurements can be saved when run one after the other
@@ -643,10 +637,8 @@ class Data_processor:
                                     data_all.append(line + "\n")
                                     #fil.write(line + "\n")
                                 elif length == 1:
-                                    print(f"File {f} do not have any values.")
                                     self.log(f"File {f} do not have any values.")
                                 else:
-                                    print(f"File {f} has more than 1 line with values. The number of peaks are {length-1}. All will be added to the merged file.")
                                     self.log(f"File {f} has more than 1 line with values. The number of peaks are {length-1}. All will be added to the merged file.")
                                     for p in range(1,length):
                                         line = lines[p]
@@ -674,8 +666,8 @@ class Data_processor:
                         # Transforming the arrays to the correctd format
                         f_from_FFT = np.array(f_from_FFT)
                         Z_values_from_FFT = np.array(Z_values_from_FFT)
-                        print("f_from_FFT is: " + str(f_from_FFT))
-                        print("Z_values_from_FFT is: " + str(Z_values_from_FFT))
+                        self.log("f_from_FFT is: " + str(f_from_FFT))
+                        self.log("Z_values_from_FFT is: " + str(Z_values_from_FFT))
                         """
                         M, mu, Z_linKK, res_real, res_imag = linKK(f_from_FFT, Z_values_from_FFT, c=.85, max_M=100, fit_type='complex', add_cap=False)
                         print("M value is :" + str(M))
@@ -697,7 +689,7 @@ class Data_processor:
                                     fil.write(line)
 
                         fil.close()
-                        print(f"Made .mm file for pico: {picoscope_index} channel: {channel_index}")
+                        self.log(f"Made .mm file for pico: {picoscope_index} channel: {channel_index}")
             
         # Generate the Parameters.txt file that helps for plotting
         fil = open(f"Total_mm\\{self.save_time_string}\\Parameters.txt","w")
@@ -713,7 +705,6 @@ class Data_processor:
         fil.write(f"AC current:\t{self.parameters["AC_current"]}\n")
         fil.close()
 
-        print(f"Done creating merged .mmfile after {time.time() - merge_start} s.\n")
         self.log(f"Done creating merged .mmfile after\n\t{(time.time() - merge_start):.2f} s.\n")
 
 if __name__ == "__main__":

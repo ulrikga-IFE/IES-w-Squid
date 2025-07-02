@@ -17,7 +17,7 @@ from scipy.signal import butter, lfilter
 from scipy.fft import rfft, rfftfreq, next_fast_len
 
 class EIS_experiment():
-    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, sleep_time, constants, parameters, save_path):
+    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, save_path):
         self.start_time = time.time()
 
         self.num_picoscopes = num_picoscopes
@@ -27,6 +27,7 @@ class EIS_experiment():
         self.num_freqs = len(self.range_of_freqs)
         self.bias = bias
         self.amplitude = amplitude
+        self.low_freq_periods = low_freq_periods
         self.sleep_time = sleep_time
         self.constants = constants
         self.parameters = parameters
@@ -40,6 +41,7 @@ class EIS_experiment():
         self.pico_ready = threading.Semaphore(0)
         self.admiral_ready = asyncio.Event()
         self.admiral_started_event = asyncio.Event()
+        self.experiment_complete = asyncio.Event()
 
     async def perform_experiment(self):
 
@@ -50,8 +52,11 @@ class EIS_experiment():
             if stepnumber == 1 or stepnumber > self.num_freqs + 1:
                 print(f"Admiral sleeping for {self.sleep_time} seconds")
             else:
-                print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
-                handler.pauseExperiment(self.squid_channel)
+                try:
+                    print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
+                    handler.pauseExperiment(self.squid_channel)
+                except Exception as e:
+                    print(e)
 
         def element_paused():
             self.admiral_ready.set()
@@ -63,6 +68,7 @@ class EIS_experiment():
 
         def experiment_stopped():
             print(f"Experiment complete at {time.time() - self.start_time }")
+            self.experiment_complete.set()
     
         """
         admiral instruments setup      (not done in a pretty function because we need instances globally avaliable)
@@ -89,7 +95,7 @@ class EIS_experiment():
         for frequency_index in range(self.num_freqs):
             freq = self.range_of_freqs[frequency_index]
             geis_element = AisEISGalvanostaticElement(freq, freq, 1, self.bias, self.amplitude)
-            periods = find_periods(freq)
+            periods = find_periods(freq, self.low_freq_periods)
             geis_element.setMinimumCycles(int(periods + 4 * freq))
     
             experiment.appendElement(geis_element, 1) 
@@ -132,6 +138,8 @@ class EIS_experiment():
                     self.pico_ready.acquire()
 
                 handler.resumeExperiment(self.squid_channel)
+            
+            await self.experiment_complete.wait()
                 
         task_p = asyncio.create_task(pico_task())
         task_a = asyncio.create_task(admiral_task())
@@ -197,7 +205,7 @@ class EIS_experiment():
         """
         Does the sampling for a single frequency. Is called once per frequency.
         """
-        periods = find_periods(freq)
+        periods = find_periods(freq, self.low_freq_periods)
 
         timebase = find_timebase(freq)
         samples = int(np.ceil(sample_time(periods, freq)/((timebase-2)*20e-9)))
@@ -252,7 +260,7 @@ class EIS_experiment():
         for i in range(self.num_picoscopes):
             ps.ps4000aFlashLed(self.c_handle[i],0)
             ps.ps4000aCloseUnit(self.c_handle[i])
-        print("Closed picoscopes")
+        print(f"Closed picoscopes at {time.time()}")
 
     def plot(self):
         for frequency_index in range(self.num_freqs):
@@ -284,7 +292,7 @@ class EIS_experiment():
         try:
 
             lst = []
-            periods = find_periods(freq)
+            periods = find_periods(freq, self.low_freq_periods)
 
             time_ax = np.linspace(0,sample_time(periods, self.range_of_freqs[frequency_index]),len(results[0,0]))
 
@@ -296,7 +304,8 @@ class EIS_experiment():
                             lst.append("\t"+str(results[picoscope_index, channel_index][k]))
                 lst.append("\n")
 
-            
+            if os.path.exists("temp.txt"):
+                os.remove("temp.txt")
             save_file = open("temp.txt","x")
 
             save_file.write("Date: \t" + datetime.today().strftime("%Y-%m-%d-") + "\n")
@@ -329,7 +338,7 @@ class EIS_experiment():
             #removes ability to run without pstat, but lowkey then just run the old program?
             input_value = "N"
             save_file.write("Run without potentiostat [Y/N]: \t" + str(input_value) + "\n")
-            save_file.write("Frequencies selected: \t" + str(self.range_of_freqs)+ "\n")               
+            save_file.write("Frequencies selected: \t" + str(self.parameters["selected_frequencies"])+ "\n")               
             save_file.write("\n")
             save_file.write("Time")
             for picoscope_index in range(self.num_picoscopes):
@@ -367,16 +376,20 @@ def find_timebase(freq):
     """
     Helper function to calculate timebase for each frequency. This is to avoid oversampling lower frequencies
     """
-    sampling_freq_multiplier = 25
+    if freq <= 500:
+        sampling_freq_multiplier = -0.5*freq + 300
+    else:
+        sampling_freq_multiplier = 25
+
     return int(np.ceil(50000000/(sampling_freq_multiplier*freq)+ 2))
 
-def find_periods(freq):
+def find_periods(freq, low_freq_periods):
     if freq > 1000:
             periods = 890 + 0.111 * freq
     elif freq > 10:
             periods = freq 
     else:
-        periods = 3 * freq
+        periods = low_freq_periods * freq
         
     return periods
 
@@ -386,7 +399,7 @@ def filter_data(data, freq, fs):
     filtered_data = data - mean
     filtered_data = butter_lowpass_filter(filtered_data, [0.25*freq, 4*freq], fs, order=4)
     return filtered_data
-
+ 
 def butter_lowpass_filter(data, cutOff, fs, order=4):
     nyq = 0.5*fs
     normalCutoff = [cutOff[0] / nyq,  cutOff[1] /nyq]

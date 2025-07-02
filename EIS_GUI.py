@@ -127,7 +127,7 @@ class EIS_GUI():
         cell_numbers_label.grid(row=num_picoscopes+13,column=1, sticky='nsew')
         self.cell_numbers = tk.Entry(self.root)
         self.cell_numbers.grid(row=num_picoscopes+13,column=2, sticky='nsew')
-        self.cell_numbers.insert(0,"1,2,3,4,5,6,7,8,9,10")
+        self.cell_numbers.insert(0,"1,2,3,4,5")
 
         area_label = tk.Label(self.root,text="Area (in cm2):")
         area_label.grid(row=num_picoscopes+14,column=1, sticky='nsew')
@@ -164,7 +164,7 @@ class EIS_GUI():
         sleep_time_label.grid(row=num_picoscopes+19,column=1, sticky='nsew')
         self.sleep_time = tk.Entry(self.root)
         self.sleep_time.grid(row=num_picoscopes+19,column=2, sticky='nsew')
-        self.sleep_time.insert(0,"120") 
+        self.sleep_time.insert(0,"10") 
 
         shunt_selector_name = tk.Label(self.root,text = "Select shunt:")
         shunt_selector_name.grid(row=num_picoscopes+20,column=1,sticky='nsew')
