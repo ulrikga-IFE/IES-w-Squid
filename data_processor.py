@@ -83,7 +83,16 @@ class Watchdog(PatternMatchingEventHandler, Observer):
 
 
 class Data_processor:
-    def __init__(self,current_channels,voltage_channels, resistor_value, num_freqs, save_path, num_picoscopes, channels, parameters):
+    def __init__(self,
+                    current_channels,
+                    voltage_channels,
+                    resistor_value,
+                    num_freqs,
+                    save_path,
+                    num_picoscopes, 
+                    channels,
+                    save_metadata,
+    ) -> None:
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
         the programs looping.
@@ -99,7 +108,7 @@ class Data_processor:
         self.num_freqs = num_freqs
         self.num_picoscopes = num_picoscopes
         self.channels = channels
-        self.parameters = parameters
+        self.save_metadata = save_metadata
 
         # Tikinter set up
         self.nroot = tk.Toplevel()
@@ -602,7 +611,7 @@ class Data_processor:
         os.mkdir(path) 
 
         
-        selected_frequencies = self.parameters["selected_frequencies"].split(",")
+        selected_frequencies = self.save_metadata["selected_frequencies"].split(",")
         
         range_of_freqs = []
         for frequency in selected_frequencies:
@@ -697,12 +706,12 @@ class Data_processor:
         fil.write(f"Date:\t{self.save_time_string[:10]}\n")
         fil.write(f"Time:\t{self.save_time_string[11:]}\n\n")
 
-        fil.write(f"Cell numbers:\t{self.parameters["cell_numbers"]}\n")
-        fil.write(f"Area:\t{self.parameters["area"]}\n")
-        fil.write(f"Temperature:\t{self.parameters["temperature"]}\n")
-        fil.write(f"Pressure:\t{self.parameters["pressure"]}\n")
-        fil.write(f"DC current:\t{self.parameters["DC_current"]}\n")
-        fil.write(f"AC current:\t{self.parameters["AC_current"]}\n")
+        fil.write(f"Cell numbers:\t{self.save_metadata["cell_numbers"]}\n")
+        fil.write(f"Area:\t{self.save_metadata["area"]}\n")
+        fil.write(f"Temperature:\t{self.save_metadata["temperature"]}\n")
+        fil.write(f"Pressure:\t{self.save_metadata["pressure"]}\n")
+        fil.write(f"DC current:\t{self.save_metadata["DC_current"]}\n")
+        fil.write(f"AC current:\t{self.save_metadata["AC_current"]}\n")
         fil.close()
 
         self.log(f"Done creating merged .mmfile after\n\t{(time.time() - merge_start):.2f} s.\n")

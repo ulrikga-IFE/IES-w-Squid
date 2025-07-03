@@ -17,21 +17,37 @@ from scipy.signal import butter, lfilter
 from scipy.fft import rfft, rfftfreq, next_fast_len
 
 class EIS_experiment():
-    def __init__(self, num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, save_path):
+    def __init__(self, 
+                    num_picoscopes      : int,
+                    channels            : np.ndarray[tuple[int,int], bool],
+                    experiment_ranges   : np.ndarray[int, int],
+                    range_of_freqs      : np.ndarray[int, float],
+                    bias                : float,
+                    amplitude           : float,
+                    low_freq_periods    : float,
+                    sleep_time          : float, 
+                    time_path           : str,
+                    save_metadata       : dict):
+        
         self.start_time = time.time()
+        self.admiral_channel = 1
+
 
         self.num_picoscopes = num_picoscopes
         self.channels = channels
-        self.squid_channel = 1
+
+        self.experiment_ranges = experiment_ranges
+
         self.range_of_freqs = range_of_freqs
         self.num_freqs = len(self.range_of_freqs)
+
         self.bias = bias
         self.amplitude = amplitude
         self.low_freq_periods = low_freq_periods
         self.sleep_time = sleep_time
-        self.constants = constants
-        self.parameters = parameters
-        self.save_path = save_path
+
+        self.save_path = time_path
+        self.save_metadata = save_metadata
 
         self.pos = np.arange(16384, 16384 + self.num_picoscopes)     # The first picoscope is at 16384 from the manual # arange for faster creation (EDIT ELLING)
         self.c_handle = self.pos.astype(ctypes.c_int16)
@@ -54,7 +70,7 @@ class EIS_experiment():
             else:
                 try:
                     print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
-                    handler.pauseExperiment(self.squid_channel)
+                    handler.pauseExperiment(self.admiral_channel)
                 except Exception as e:
                     print(e)
 
@@ -101,7 +117,7 @@ class EIS_experiment():
             experiment.appendElement(geis_element, 1) 
         experiment.appendElement(constant_element, 1)
 
-        uploading_status = handler.uploadExperimentToChannel(self.squid_channel,experiment)     #uploading the experiment onto a channel where it can be run
+        uploading_status = handler.uploadExperimentToChannel(self.admiral_channel,experiment)     #uploading the experiment onto a channel where it can be run
         if uploading_status:
             print(f"Uploading experiment to instrument: {uploading_status.message()}")
             
@@ -126,7 +142,7 @@ class EIS_experiment():
             """
             Coroutine for controlling Admiral instruments
             """
-            starting_error = handler.startUploadedExperiment(self.squid_channel)         #starting experiment
+            starting_error = handler.startUploadedExperiment(self.admiral_channel)         #starting experiment
             if starting_error:
                 print(f'Experiment starting: {starting_error.message()}')
                 #self.log(f'Experiment starting: {starting_error.message()}')
@@ -137,7 +153,7 @@ class EIS_experiment():
                 for _ in range(self.num_picoscopes):
                     self.pico_ready.acquire()
 
-                handler.resumeExperiment(self.squid_channel)
+                handler.resumeExperiment(self.admiral_channel)
             
             await self.experiment_complete.wait()
                 
@@ -148,36 +164,40 @@ class EIS_experiment():
         await task_a
         self.pico_close()
 
-    def run_one_pico(self, picoscope_index, timebase, samples):
-            for channel_index in range(4):
-                valid_buffers = ps.ps4000aSetDataBuffer(self.c_handle[picoscope_index],
-                                                        channel_index,
-                                                        ctypes.byref(self.bufferMax[picoscope_index][channel_index]),
-                                                        samples,
-                                                        0,
-                                                        0)
-                assert_pico_ok(valid_buffers)
+    def run_one_pico(self,
+                        picoscope_index : int,
+                        timebase : int,
+                        samples : int,
+    ) -> None:
+        for channel_index in range(4):
+            valid_buffers = ps.ps4000aSetDataBuffer(self.c_handle[picoscope_index],
+                                                    channel_index,
+                                                    ctypes.byref(self.bufferMax[picoscope_index][channel_index]),
+                                                    samples,
+                                                    0,
+                                                    0)
+            assert_pico_ok(valid_buffers)
+    
+        preTriggerSamples = 0
+        postTriggerSamples = samples
+        #Here is the actual taking of data
+        self.pico_ready.release()
+        self.admiral_started_sem.acquire()
+
+        time.sleep(2)
+        error_RunBlock = ps.ps4000aRunBlock(self.c_handle[picoscope_index], preTriggerSamples, postTriggerSamples, timebase, None, 0, None, None)
+        assert_pico_ok(error_RunBlock)
+
+        ready = ctypes.c_int16(0)
+        check = ctypes.c_int16(0)
+        while ready.value == check.value:
+            ps.ps4000aIsReady(self.c_handle[picoscope_index], ctypes.byref(ready))      #Making sure the program waits until Pico is done sampling
         
-            preTriggerSamples = 0
-            postTriggerSamples = samples
-            #Here is the actual taking of data
-            self.pico_ready.release()
-            self.admiral_started_sem.acquire()
+        overflow = ctypes.c_int16()
+        error_GetValues = ps.ps4000aGetValues(self.c_handle[picoscope_index], 0, ctypes.byref(ctypes.c_int16(samples)), 0, 0, 0,  ctypes.byref(overflow))
+        assert_pico_ok(error_GetValues)
 
-            time.sleep(2)
-            error_RunBlock = ps.ps4000aRunBlock(self.c_handle[picoscope_index], preTriggerSamples, postTriggerSamples, timebase, None, 0, None, None)
-            assert_pico_ok(error_RunBlock)
-
-            ready = ctypes.c_int16(0)
-            check = ctypes.c_int16(0)
-            while ready.value == check.value:
-                ps.ps4000aIsReady(self.c_handle[picoscope_index], ctypes.byref(ready))      #Making sure the program waits until Pico is done sampling
-            
-            overflow = ctypes.c_int16()
-            error_GetValues = ps.ps4000aGetValues(self.c_handle[picoscope_index], 0, ctypes.byref(ctypes.c_int16(samples)), 0, 0, 0,  ctypes.byref(overflow))
-            assert_pico_ok(error_GetValues)
-
-    async def pico_setup(self):      
+    async def pico_setup(self) -> None:      
         """
         Opens PicoScopes and sets channels. 
         """
@@ -189,19 +209,20 @@ class EIS_experiment():
             flash_led_status = ps.ps4000aFlashLed(self.c_handle[picoscope_index],-1)
             assert_pico_ok(flash_led_status)       #add delay in order to indentify which unit is which?
 
-            for channel_index in range(4):
+            for channel_index in range(4): 
                 if self.channels[picoscope_index, channel_index]:
                     pico_channel_status = ps.ps4000aSetChannel(self.c_handle[picoscope_index],
                                         channel_index,
                                         1,
                                         1,
-                                        self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
+                                        self.experiment_ranges[0 if channel_index == 0 else 2],
                                         0)
                     assert_pico_ok(pico_channel_status)
 
+
         print("PicoScope(s) is(are) ready")
         
-    async def run_one_freq(self, freq):
+    async def run_one_freq(self, freq : float) -> np.ndarray:
         """
         Does the sampling for a single frequency. Is called once per frequency.
         """
@@ -241,8 +262,8 @@ class EIS_experiment():
                 for channel_index in range(4):
                     fs = samples/sample_time(periods,freq)
                     unfiltered_results = np.asarray(adc2mV(self.bufferMax[picoscope_index][channel_index],
-                                                        self.constants["currentRange" if channel_index == 0 else "cellPotentialRange"],
-                                                        self.constants["maxADC"]))        #transforming data in buffer into readable mV data
+                                                        self.experiment_ranges[0 if channel_index == 0 else 2],
+                                                        ctypes.c_int16(32767)))        #transforming data in buffer into readable mV data
 
                     freq_results[picoscope_index, channel_index] = filter_data(unfiltered_results, freq, fs)
 
@@ -286,7 +307,11 @@ class EIS_experiment():
                 plt.legend()
                 plt.show()
     
-    def saveData(self, frequency_index, freq, results):
+    def saveData(self,
+                    frequency_index : int,
+                    freq            : float,
+                    results         : np.ndarray,
+    ) -> None:
         start_time = time.time()
         print("Start making raw data file:", flush=True)
         try:
@@ -323,22 +348,22 @@ class EIS_experiment():
                     picoscope_string += str(0)
             # NOT TESTED
 
-            save_file.write("Picoscope code: \t" + str(picoscope_string) + "\n\n")
-            save_file.write("Max potential (current channel) [V]: \t" + str(self.parameters["max_potential_channel"])+ "\n")
-            save_file.write("Max stack potential [V]: \t" + str(self.parameters["max_potential_stack"]) + "\n")
-            save_file.write("Max cell potential [V]: \t" + str(self.parameters["max_potential_cell"]) + "\n\n")
-            save_file.write("Cell numbers: \t" + str(self.parameters["cell_numbers"])+ "\n")
-            save_file.write("Area [cm2]: \t" + str(self.parameters["area"])+ "\n")
-            save_file.write("Temperature [degC]: \t" + str(self.parameters["temperature"])+ "\n")
-            save_file.write("Pressure [bar]: \t" + str(self.parameters["pressure"])+ "\n")
-            save_file.write("DC current [A]: \t" + str(self.parameters["DC_current"])+ "\n")
-            save_file.write("AC current [in pct of DC current]: \t" + str(self.parameters["AC_current"])+ "\n")
-            save_file.write("Shunt: \t" + str(self.parameters["shunt"])+ "\n\n")
+            save_file.write("Picoscope code: \t" + picoscope_string + "\n\n")
+            save_file.write("Max potential (current channel) [V]: \t" + self.save_metadata["max_potential_channel"]+ "\n")
+            save_file.write("Max stack potential [V]: \t" + self.save_metadata["max_potential_stack"] + "\n")
+            save_file.write("Max cell potential [V]: \t" + self.save_metadata["max_potential_cell"] + "\n\n")
+            save_file.write("Cell numbers: \t" + self.save_metadata["cell_numbers"]+ "\n")
+            save_file.write("Area [cm2]: \t" + self.save_metadata["area"]+ "\n")
+            save_file.write("Temperature [degC]: \t" + self.save_metadata["temperature"]+ "\n")
+            save_file.write("Pressure [bar]: \t" + self.save_metadata["pressure"]+ "\n")
+            save_file.write("DC current [A]: \t" + self.save_metadata["DC_current"]+ "\n")
+            save_file.write("AC current [in pct of DC current]: \t" + self.save_metadata["AC_current"]+ "\n")
+            save_file.write("Shunt: \t" + self.save_metadata["shunt"]+ "\n\n")
 
             #removes ability to run without pstat, but lowkey then just run the old program?
             input_value = "N"
             save_file.write("Run without potentiostat [Y/N]: \t" + str(input_value) + "\n")
-            save_file.write("Frequencies selected: \t" + str(self.parameters["selected_frequencies"])+ "\n")               
+            save_file.write("Frequencies selected: \t" + self.save_metadata["selected_frequencies"]+ "\n")               
             save_file.write("\n")
             save_file.write("Time")
             for picoscope_index in range(self.num_picoscopes):
@@ -369,10 +394,10 @@ class EIS_experiment():
             print(f"Exception in creating file: {e}")
 
 #Convenience functions
-def sample_time(periods, freq):        
+def sample_time(periods : float, freq : float) -> float:
     return periods/freq             #[s]
 
-def find_timebase(freq):
+def find_timebase(freq : float) -> int:
     """
     Helper function to calculate timebase for each frequency. This is to avoid oversampling lower frequencies
     """
@@ -383,7 +408,7 @@ def find_timebase(freq):
 
     return int(np.ceil(50000000/(sampling_freq_multiplier*freq)+ 2))
 
-def find_periods(freq, low_freq_periods):
+def find_periods(freq : float, low_freq_periods : float) -> float:
     if freq > 1000:
             periods = 890 + 0.111 * freq
     elif freq > 10:

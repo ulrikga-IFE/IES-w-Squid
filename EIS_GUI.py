@@ -8,7 +8,13 @@ import os
 import numpy as np
 
 class EIS_GUI():
-    def __init__(self, num_picoscopes, channels, start_and_process_measurements, open_fitting, open_processing) -> None:
+    def __init__(self, 
+                    num_picoscopes                  : int,
+                    channels                        : np.ndarray[tuple[int, int], bool],
+                    start_and_process_measurements  : callable,
+                    open_fitting                    : callable,
+                    open_processing                 : callable
+    ) -> None:
         self.root = tk.Tk()                             # Create main window
         self.root.geometry('1280x720')
         self.root.minsize(1800,900)                     # Makes the minimum size of the window equal to the initial size
@@ -286,54 +292,54 @@ class EIS_GUI():
 
         cell_potential_range = find_voltage_range(self.max_pot_cell_voltage_channel.get())
  
-        parameters = { 
-                       "max_potential_channel" : str(self.max_pot_current_channel.get()),
-                       "max_potential_stack" : str(self.max_pot_stack_voltage_channel.get()),
-                       "max_potential_cell" : str(self.max_pot_cell_voltage_channel.get()),
-                       "max_frequency" : str(self.max_freq.get()),
-                       "min_frequency" : str(self.min_freq.get()),
-                       "steps_per_decade" : str(self.steps_decade.get()),
-                       "low_freq_periods" :str(self.low_freq_period.get()),
-                       "cell_numbers" : str(self.cell_numbers.get()),
-                       "area" : str(self.area.get()),
-                       "temperature" : str(self.temperature.get()),
-                       "pressure" : str(self.pressure.get()),
-                       "DC_current" : str(self.dc_current.get()),
-                       "AC_current" : str(self.ac_current.get()),
-                       "sleep_time" : str(self.sleep_time.get()),
-                       "shunt" : str(self.shunt_value.get()),
-                       "selected_frequencies" : str(self.frequencies_selected.get())
-                       }
-        constants = {
-                          "timeIntervalns" : ctypes.c_float(),
-                          "returnedMaxSamples" : ctypes.c_int32(),
-                          "overflow" : ctypes.c_int16(),                                # create overflow location
-                          "maxADC" : ctypes.c_int16(32767),                             # find maximum ADC count value
-                          "currentRange" : int(float(current_range)),
-                          "stackPotentialRange" : int(float(stack_potential_range)),
-                          "cellPotentialRange" : int(float(cell_potential_range)),
-                          }
+        experiment_parameters = { 
+                        "current_range"         : int(current_range),
+                        "stack_potential_range" : int(stack_potential_range),
+                        "cell_potential_range"  : int(cell_potential_range),
+                        "max_frequency"         : float(self.max_freq.get()),
+                        "min_frequency"         : float(self.min_freq.get()),
+                        "steps_per_decade"      : int(self.steps_decade.get()),
+                        "selected_frequencies"  : str(self.frequencies_selected.get()),
+                        "low_freq_periods"      : float(self.low_freq_period.get()),
+                        "bias"                  : float(self.dc_current.get()),
+                        "amplitude"             : float(self.ac_current.get()),
+                        "sleep_time"            : float(self.sleep_time.get()),
+                        "resistor_value"        : float(0)
+        }
+        save_metadata = {
+                        "max_potential_channel" : str(self.max_pot_current_channel.get()),
+                        "max_potential_stack"   : str(self.max_pot_stack_voltage_channel.get()),
+                        "max_potential_cell"    : str(self.max_pot_cell_voltage_channel.get()),
+                        "cell_numbers"          : str(self.cell_numbers.get()),
+                        "area"                  : str(self.area.get()),
+                        "temperature"           : str(self.temperature.get()),
+                        "pressure"              : str(self.pressure.get()),
+                        "DC_current"            : str(self.dc_current.get()),
+                        "AC_current"            : str(self.ac_current.get()),
+                        "shunt"                 : str(self.shunt_value.get()),
+                        "selected_frequencies"  : str(self.frequencies_selected.get()),
+        }
 
-        match parameters["shunt"]:
+        match save_metadata["shunt"]:
             case "200mA/200mV":
-                parameters["resistor_value"] = 1
+                experiment_parameters["resistor_value"] = 1
             case "2A/200mV":
-                parameters["resistor_value"] = 0.134                 # Modified from experimental measurement 30.11.2022 - Based on connection on large pins
+                experiment_parameters["resistor_value"] = 0.134                 # Modified from experimental measurement 30.11.2022 - Based on connection on large pins
             case "5A/50mV":
-                parameters["resistor_value"] = 0.01
+                experiment_parameters["resistor_value"] = 0.01
             case "25A/60mV":
-                parameters["resistor_value"] = 0.0024
+                experiment_parameters["resistor_value"] = 0.0024
             case "100A/60mV":
-                parameters["resistor_value"] = 0.0006
+                experiment_parameters["resistor_value"] = 0.0006
             case "200A/60mV":
-                parameters["resistor_value"] = 0.0003
+                experiment_parameters["resistor_value"] = 0.0003
             case "Custom":
-                parameters["resistor_value"] = tk.simpledialog.askfloat("Resistor value in Ohm", "You have selected a custom shunt, please give the resistance value in ohm.",
+                experiment_parameters["resistor_value"] = tk.simpledialog.askfloat("Resistor value in Ohm", "You have selected a custom shunt, please give the resistance value in ohm.",
                                 parent=self.root)
         
         self.submit_btn.config(bg="#00ff00")
 
-        return parameters, constants
+        return experiment_parameters, save_metadata
     
     def fullscrn(self):
         '''

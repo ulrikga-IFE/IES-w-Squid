@@ -17,44 +17,49 @@ import data_processor
 import dashboard_for_plotting_and_fitting as fitting_dash
 
 class EIS_main:
-    def __init__(self):
+    def __init__(self) -> None:
         scopes = tk.simpledialog.askstring(title="Picoscopes",prompt="How many picoscopes?")
         self.num_picoscopes = int(float(scopes))
 
-        self.channels = np.zeros((self.num_picoscopes,4))
+        self.channels = np.zeros((self.num_picoscopes,4), dtype=bool)
         for picoscope_index in range(self.num_picoscopes):
             chn_diag = tk.simpledialog.askstring(title=f"Picoscope {picoscope_index+1}",
                                                     prompt=f"Write answer with 1 for yes, 0 for no, in one number. Ex: 1100 for chA and chB.\nChannels in picoscope {picoscope_index+1}:")
             for channel_index in range(4):
-                self.channels[picoscope_index,channel_index] = int(float(chn_diag[channel_index]))
+                self.channels[picoscope_index,channel_index] =bool(float(chn_diag[channel_index]))
 
         self.gui = EIS_GUI.EIS_GUI(self.num_picoscopes, self.channels, self.start_and_process_measurements, self.open_fitting, self.open_processing)
         self.gui.root.mainloop()
         
-    def start_and_process_measurements(self):
+    def start_and_process_measurements(self) -> None:
         self.gui.log("Starting measurements")
+        
+        # Collecting parameters from the GUI
+        experiment_parameters, save_metadata = self.gui.collect_parameters()
 
-        parameters, constants = self.gui.collect_parameters()
-
-        num_channels = 0
-        for picoscop_index in range(self.num_picoscopes):
-            for channel_index in range(4):
-                num_channels += self.channels[picoscop_index, channel_index]
-
-        if len(parameters["cell_numbers"].split(",")) != num_channels - self.num_picoscopes:
+        # Acceptance test on cell numbers
+        num_channels = sum(sum(self.channels))
+        if len(save_metadata["cell_numbers"].split(",")) != num_channels - self.num_picoscopes:
             self.gui.log("Error: must have the same number of cells as voltage channels")
             return
 
+        # Collecting the current and potential ranges
+        experiment_ranges = np.array([experiment_parameters["current_range"],
+                                        experiment_parameters["stack_potential_range"],
+                                        experiment_parameters["cell_potential_range"]])
+
+        # Collecting the correct frequencies depending on inputted settings
         if self.gui.manual_freq_check.get():
-            selected_frequencies = parameters["selected_frequencies"].split(",")
+            selected_frequencies = experiment_parameters["selected_frequencies"].split(",")
             range_of_freqs = []
             for frequency in selected_frequencies:
                 range_of_freqs.append(float(frequency))
+            range_of_freqs = np.array(range_of_freqs)
             num_freqs = len(range_of_freqs)
         else:
-            max_freq = float(parameters["max_frequency"])
-            min_freq = float(parameters["min_frequency"])
-            steps_per_decade = int(parameters["steps_per_decade"])
+            max_freq = experiment_parameters["max_frequency"]
+            min_freq = experiment_parameters["min_frequency"]
+            steps_per_decade = experiment_parameters["steps_per_decade"]
             
             num_decades = log10(max_freq) - log10(min_freq)
             num_freqs = int(num_decades) * steps_per_decade
@@ -64,45 +69,96 @@ class EIS_main:
             for frequency in range_of_freqs:
                 selected_frequencies = selected_frequencies + str(frequency) + ","
             selected_frequencies = selected_frequencies[:-1]
-            parameters["selected_frequencies"] = selected_frequencies
-                
-        bias = float(parameters["DC_current"])
-        amplitude = bias * float(parameters["AC_current"])
-        low_freq_periods = float(parameters["low_freq_periods"])
+            save_metadata["selected_frequencies"] = selected_frequencies
+        
+        # Collecting the EIS parameters
+        bias = experiment_parameters["bias"]
+        amplitude = bias * experiment_parameters["amplitude"]
+        low_freq_periods = experiment_parameters["low_freq_periods"]
+        sleep_time = experiment_parameters["sleep_time"]
+        resistor_value = experiment_parameters["resistor_value"]
 
-        sleep_time = float(parameters["sleep_time"])
-
+        # Finding the time and date of experiment start to create the save folders
         date_today = datetime.today().strftime("%Y-%m-%d-")
         time_now = datetime.now().strftime("%H%M-%S")
         time_path = date_today + time_now
-        
-        save_path = f"Raw_data\\{time_path}"
+
     
         do_experiment = tk.messagebox.askyesnocancel("Query to continue", "Do you wish to proceed with experiment?")
-        
         if do_experiment:
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
+            if not os.path.exists(f"Raw_data\\{time_path}"):
+                os.makedirs(f"Raw_data\\{time_path}")
             
             pool = Pool(processes=1)
-            pool.apply_async(self.do_experiment, [self.num_picoscopes, self.channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path])
+            pool.apply_async(self.do_experiment, [self.num_picoscopes,
+                                                    self.channels,
+                                                    experiment_ranges,
+                                                    range_of_freqs,
+                                                    bias, 
+                                                    amplitude,
+                                                    low_freq_periods,
+                                                    sleep_time,
+                                                    time_path, 
+                                                    save_metadata])
 
             if self.gui.process_data_check.get():
                 processed_path = f"Save_folder\\{time_path}"
                 if not os.path.exists(processed_path):
                     os.makedirs(processed_path)
 
-                resistor_value = parameters["resistor_value"]
 
-                self.process_data(resistor_value, num_freqs, time_path, parameters)
+                self.process_data(resistor_value,
+                                    num_freqs,
+                                    time_path,
+                                    save_metadata)
 
     @staticmethod
-    def do_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path):
+    def do_experiment(num_picoscopes        : int,
+                        channels            : np.ndarray[tuple[int,int], bool],
+                        experiment_ranges   : np.ndarray[int, int],
+                        range_of_freqs      : np.ndarray[int, float],
+                        bias                : float,
+                        amplitude           : float,
+                        low_freq_periods    : float,
+                        sleep_time          : float, 
+                        time_path           : str,
+                        save_metadata       : dict,
+    ) -> None:
+        """
+        Parameters
+        ----------
+        num_picoscopes : int
+                Represents the number of picoscopes to take measurement from
+        channels : ndarray
+                2D array containing data with 'bool' type representing the active picoscope channels
+        range_of_freqs : ndarray
+                1D array containing data with 'float' type representing all frequencies to run EIS with
+        bias : float
+                Represents the applied DC current bias
+        amplitude : float
+                Represents the amplitude of the applied AC current
+        low_freq_periods : float
+                Represents the number of periods to run for frequencies < 10 Hz
+        sleep_time : float
+                Represents the number of seconds of DC current to run before and after the EIS experiment
+        time_path : str
+                The date and time used to create the folder to save results from the EIS
+
+        """
 
         app = QApplication(sys.argv)
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
-        experiment = EIS_experiment.EIS_experiment(num_picoscopes, channels, range_of_freqs, bias, amplitude, low_freq_periods, sleep_time, constants, parameters, time_path)
+        experiment = EIS_experiment.EIS_experiment(num_picoscopes,
+                                                    channels,
+                                                    experiment_ranges,
+                                                    range_of_freqs,
+                                                    bias,
+                                                    amplitude,
+                                                    low_freq_periods,
+                                                    sleep_time, 
+                                                    time_path,
+                                                    save_metadata)
 
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
@@ -110,7 +166,7 @@ class EIS_main:
 
         experiment.plot()
 
-    def process_data(self, resistor_value, num_freqs, save_path, parameters):
+    def process_data(self, resistor_value, num_freqs, save_path, save_metadata):
         counter = 1
         current_channels_watch_imp = ""
         voltage_channels_watch_imp = ""
@@ -133,7 +189,7 @@ class EIS_main:
                                                 save_path,
                                                 self.num_picoscopes,
                                                 self.channels,
-                                                parameters)
+                                                save_metadata)
         time.sleep(1)
         processor.start_processing()
 
