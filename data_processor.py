@@ -356,23 +356,21 @@ class Data_processor:
 
     def start_processing(self) -> None:
         """
-        When
+        Called by
         ----------
-        Calles when the start watch button is pressed.
+        Called when initializing the data_processor to immediately process data while measuring.
+        Alternatively called manually through a button press.
 
         Does
         ----------
-        If no watchdog is pressent it creates a new one with the
-        current watch_path and save_path. It also starts to go
-        through all the files currently present in the watch_path
-        and processes them.
+        If the Data_processor object doesn't contain a watchdog, 
+        and the watch_path and save_path variables have been updated,
+        it will create a watchdog to watch the currently set watch_path and save_path
+        and start it.
 
-        If a watchdog is present it reports that it alerady is active
+        Else it will log an error and return.
 
-        Note
-        ----------
-        Checks that watch_path and save_path do not have there defualt
-        value. If they have default no watchdog is initialized.
+        If there is no error it will also start processing the files currently in the watch_path.
 
         """
         if self.watchdog is None:

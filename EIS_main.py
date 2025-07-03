@@ -33,6 +33,19 @@ class EIS_main:
         self.gui.root.mainloop()
         
     def start_and_process_measurements(self) -> None:
+        """
+        Called when
+        ---------
+        Called by a button press from the GUI.
+
+        Description
+        ----
+        Collects all parameters from the GUI.
+
+        Then confirms you wish to proceed, before calling do_experiment with collected parameters.
+
+        If the "Immediately process data" checkbox is checked, it will also call process_data.
+        """
 
         self.gui.log("Starting measurements")
         
@@ -126,7 +139,7 @@ class EIS_main:
                         low_freq_periods    : float,
                         sleep_time          : float, 
                         time_path           : str,
-                        save_metadata       : dict
+                        save_metadata       : dict[str, str]
     ) -> bool:
         """
         Parameters
@@ -149,7 +162,16 @@ class EIS_main:
                 Represents the number of seconds of DC current to run before and after the EIS experiment
         time_path : str
                 The date and time used to create the folder to save results from the EIS
+        save_metadata : dict
+                Dictionary containing all required metadata for saving files.
 
+        Called when
+        ----------
+        Called by start_and_process_measurements as the job of a multiprocessing.pool.Pool worker.
+
+        Description
+        ----------
+        Creates an EIS_experiment object and waits for it to finish running perform_experiment.        
         """
 
         # Starts all loops necessary for interfacing with hardware
@@ -157,7 +179,7 @@ class EIS_main:
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
 
-        # Creates the experiment object with the inputted parameters
+        # Creates an experiment object with the inputted parameters
         experiment = EIS_experiment.EIS_experiment(num_picoscopes,
                                                     channels,
                                                     experiment_ranges,
@@ -169,7 +191,7 @@ class EIS_main:
                                                     time_path,
                                                     save_metadata)
 
-        # Waits for all the measurements to be complete and then closes the loops
+        # Waits for all measurements to be complete and then closes the loops
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
         app.quit()

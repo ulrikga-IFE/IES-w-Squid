@@ -17,6 +17,24 @@ from scipy.signal import butter, lfilter
 from scipy.fft import rfft, rfftfreq, next_fast_len
 
 class EIS_experiment():
+    """
+    EIS_experiment
+    ===========
+    Class which handles connecting to hardware,
+    syncing experiments and measurements,
+    taking data, and pre-processing and saving of data.
+
+    Member functions
+    --------
+    - perform_experiment
+    - run_one_pico
+    - pico_setup
+    - run_one_freq
+    - pico_close
+    - plot
+    - saveData
+    
+    """
     def __init__(self, 
                     num_picoscopes      : int,
                     channels            : np.ndarray[tuple[int,int], bool],
@@ -29,6 +47,34 @@ class EIS_experiment():
                     time_path           : str,
                     save_metadata       : dict[str, str]
     ) -> None:
+        """
+        Parameters
+        ----------
+        num_picoscopes : int
+                Represents the number of picoscopes to take measurement from
+        channels : ndarray
+                2D array containing data with 'bool' type representing the active picoscope channels
+        experiment_ranges : ndarray
+                1D array containing the current and potential ranges of the experiment
+        range_of_freqs : ndarray
+                1D array containing data with 'float' type representing all frequencies to run EIS with
+        bias : float
+                Represents the applied DC current bias
+        amplitude : float
+                Represents the amplitude of the applied AC current
+        low_freq_periods : float
+                Represents the number of periods to run for frequencies < 10 Hz
+        sleep_time : float
+                Represents the number of seconds of DC current to run before and after the EIS experiment
+        time_path : str
+                The date and time used to create the folder to save results from the EIS
+        save_metadata : dict
+                Dictionary containing all required metadata for saving files.
+
+        Description
+        ----------
+        Initializes all member variables.
+        """
         
         self.start_time = time.time()
         self.admiral_channel = 1
