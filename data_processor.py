@@ -55,7 +55,11 @@ class Watchdog(PatternMatchingEventHandler, Observer):
     for updates and if a file is created is calls the on_created function.
     """
 
-    def __init__(self, path=".", patterns=("*.txt",), logfunc=print, detected_file=None):
+    def __init__(self,
+                    path            : str = ".",
+                    patterns        : tuple[str, str] = ("*.txt",),
+                    logfunc         : callable = print,
+                    detected_file   : callable = None):
         """
         Parameters:
         ----------
@@ -84,14 +88,14 @@ class Watchdog(PatternMatchingEventHandler, Observer):
 
 class Data_processor:
     def __init__(self,
-                    current_channels,
-                    voltage_channels,
-                    resistor_value,
-                    num_freqs,
-                    save_path,
-                    num_picoscopes, 
-                    channels,
-                    save_metadata,
+                    current_channels    : str,
+                    voltage_channels    : str,
+                    resistor_value      : float,
+                    num_freqs           : int,
+                    save_path           : str,
+                    num_picoscopes      : int, 
+                    channels            : np.ndarray[tuple[int, int], bool],
+                    save_metadata       : str,
     ) -> None:
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
@@ -161,7 +165,7 @@ class Data_processor:
 
         self.save_time_string = save_path
 
-    def make_canvases(self):
+    def make_canvases(self) -> None:
         """Creates the Canvases for the interface"""
         self.plot_canvas_nyquist = GUI_helper.PlotCanvas.place(
             self.nroot, self.FIGSIZE, self.DPI, 0, self.START_FIG_Y
@@ -186,7 +190,7 @@ class Data_processor:
             sharex=True,
         )
 
-    def make_buttons(self):
+    def make_buttons(self) -> None:
         """Creates the buttons for the interface"""
         tk.Button(
             self.nroot,
@@ -228,7 +232,7 @@ class Data_processor:
             height=self.BUTTON_HEIGHT_CHARACTERS,
         ).place(x=2 * self.FIGL_PIXELS, y=self.BUTTON_HEIGHT_PIXELS * butt_num)
 
-    def make_inboxes(self):
+    def make_inboxes(self) -> None:
         """Creates the inboxes for the parameters for the interface"""
         # Button texts
         self.inbox_names = [
@@ -259,7 +263,7 @@ class Data_processor:
         self.inboxes[4].set("0.4")                                     # SHOULD BE 0.5
         self.inboxes[5].set(self.resistor_value)                      # This is set as Ohm to be more understandable. Option let's the operator set this in the main GUI interface
 
-    def make_filterfunction(self):
+    def make_filterfunction(self) -> None:
          # Button texts
         self.filter_name = tk.Label(self.nroot,text = "Window function for filtering")
         self.filter_name.place(x = 2.3 * self.FIGL_PIXELS + self.BUTTON_WIDTH_PIXELS, y = 0)
@@ -312,7 +316,7 @@ class Data_processor:
 
         self.filters[0].set("4.2")
 
-    def get_inbox_values(self):
+    def get_inbox_values(self) -> list:
         """
         Reads the values from the inboxes and returns a list of them.
         Does the conversions by the float method and if the voltage index
@@ -340,17 +344,17 @@ class Data_processor:
         out.append(float(self.inboxes[5].get()))
         return out
 
-    def toggleFullScreen(self, event):
+    def toggleFullScreen(self, event) -> None:
         """Function for toggeling fullscreen window"""
         self.fullScreenState = not self.fullScreenState
         self.nroot.attributes("-fullscreen", self.fullScreenState)
 
-    def quitFullScreen(self, event):
+    def quitFullScreen(self, event) -> None:
         """Function for quiting fullscreen window"""
         self.fullScreenState = False
         self.nroot.attributes("-fullscreen", self.fullScreenState)
 
-    def start_processing(self):
+    def start_processing(self) -> None:
         """
         When
         ----------
@@ -407,7 +411,7 @@ class Data_processor:
         else:
             self.log("Watch already started")
 
-    def stop_processing(self):
+    def stop_processing(self) -> None:
         """
         When
         ----------
@@ -436,7 +440,7 @@ class Data_processor:
         self.log(f"Processing complete at {time.time()}")
         self.save_total_mm()
 
-    def single_file(self):
+    def single_file(self) -> None:
         """
         When
         ----------
@@ -472,7 +476,7 @@ class Data_processor:
         else:
             self.log("Watch activated, turn of to use single file.")
 
-    def detected_file(self, save_path, file_path):
+    def detected_file(self, save_path : str, file_path : str) -> None:
         """
         Parameters:
         ----------
@@ -557,7 +561,7 @@ class Data_processor:
         if self.files_processed ==  self.num_freqs:
             self.stop_processing()
 
-    def select_path(self,save_path):
+    def select_path(self, save_path : str) -> None:
         """Helper function to select input folder/directory, called by Browse watch button"""
         # Ask for input file folder/directory
         path = f"Raw_data\\{save_path}"
@@ -569,7 +573,7 @@ class Data_processor:
         if not os.path.exists(path):
             raise Exception(f"Cannot find {path}")
 
-    def select_save_path(self, save_path):
+    def select_save_path(self, save_path : str) -> None:
         """Helper function to select save folder/directory, called by Browse save button"""
         # Ask for save file folder/directory
         path = f"Save_folder\\{save_path}"
@@ -581,7 +585,7 @@ class Data_processor:
         if not os.path.exists(path):
             raise Exception(f"Cannot find {path}")
 
-    def log(self, message):
+    def log(self, message : str) -> None:
         """
         Parameters:
         --------
@@ -600,7 +604,7 @@ class Data_processor:
         except Exception as e:
             print(f"Detected exception: {e}")
 
-    def save_total_mm(self):
+    def save_total_mm(self) -> None:
         merge_start = time.time()
         self.log("\nStart merging to one .mmfile.")
 

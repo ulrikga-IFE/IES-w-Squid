@@ -18,6 +18,7 @@ import dashboard_for_plotting_and_fitting as fitting_dash
 
 class EIS_main:
     def __init__(self) -> None:
+
         scopes = tk.simpledialog.askstring(title="Picoscopes",prompt="How many picoscopes?")
         self.num_picoscopes = int(float(scopes))
 
@@ -32,6 +33,7 @@ class EIS_main:
         self.gui.root.mainloop()
         
     def start_and_process_measurements(self) -> None:
+
         self.gui.log("Starting measurements")
         
         # Collecting parameters from the GUI
@@ -89,6 +91,7 @@ class EIS_main:
             if not os.path.exists(f"Raw_data\\{time_path}"):
                 os.makedirs(f"Raw_data\\{time_path}")
             
+            # Spawns a multiprocess pool object to perform the measurements
             pool = Pool(processes=1)
             pool.apply_async(self.do_experiment, [self.num_picoscopes,
                                                     self.channels,
@@ -101,12 +104,13 @@ class EIS_main:
                                                     time_path, 
                                                     save_metadata])
 
+
             if self.gui.process_data_check.get():
                 processed_path = f"Save_folder\\{time_path}"
                 if not os.path.exists(processed_path):
                     os.makedirs(processed_path)
 
-
+                # Starts to process data immediately as each measurement is completed
                 self.process_data(resistor_value,
                                     num_freqs,
                                     time_path,
@@ -122,7 +126,7 @@ class EIS_main:
                         low_freq_periods    : float,
                         sleep_time          : float, 
                         time_path           : str,
-                        save_metadata       : dict,
+                        save_metadata       : dict
     ) -> None:
         """
         Parameters
@@ -131,6 +135,8 @@ class EIS_main:
                 Represents the number of picoscopes to take measurement from
         channels : ndarray
                 2D array containing data with 'bool' type representing the active picoscope channels
+        experiment_ranges : ndarray
+                1D array containing the current and potential ranges of the experiment
         range_of_freqs : ndarray
                 1D array containing data with 'float' type representing all frequencies to run EIS with
         bias : float
@@ -146,9 +152,12 @@ class EIS_main:
 
         """
 
+        # Starts all loops necessary for interfacing with hardware
         app = QApplication(sys.argv)
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
+
+        # Creates the experiment object with the inputted parameters
         experiment = EIS_experiment.EIS_experiment(num_picoscopes,
                                                     channels,
                                                     experiment_ranges,
@@ -160,28 +169,37 @@ class EIS_main:
                                                     time_path,
                                                     save_metadata)
 
+        # Waits for all the measurements to be complete and then closes the loops
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
         app.quit()
 
-        experiment.plot()
+        #experiment.plot()
 
-    def process_data(self, resistor_value, num_freqs, save_path, save_metadata):
-        counter = 1
+    def process_data(self,
+                        resistor_value  : int,
+                        num_freqs       : int,
+                        save_path       : str,
+                        save_metadata   : dict[str, str]
+    ) -> None:
+        
+        # Loops through and gets all the active current and voltage channels
+        channel_index_in_file = 1
         current_channels_watch_imp = ""
         voltage_channels_watch_imp = ""
         for picoscope_index in range(self.num_picoscopes):
-            current_channels_watch_imp += "," +str(counter)
-            counter += 1
+            current_channels_watch_imp += "," +str(channel_index_in_file)
+            channel_index_in_file += 1
             for channel_index in range(1,4):
                 if self.channels[picoscope_index,channel_index]:
-                    voltage_channels_watch_imp += ","+str(counter)
-                    counter += 1
+                    voltage_channels_watch_imp += ","+str(channel_index_in_file)
+                    channel_index_in_file += 1
         current_channels_watch_imp = current_channels_watch_imp[1:]
         voltage_channels_watch_imp = voltage_channels_watch_imp[1:]
         print("Current channels used: " + current_channels_watch_imp)
         print("Voltage channels used: "+ voltage_channels_watch_imp)
 
+        # Creates a data processor object and starts processing data
         processor = data_processor.Data_processor(current_channels_watch_imp,
                                                 voltage_channels_watch_imp,
                                                 resistor_value,
@@ -190,27 +208,28 @@ class EIS_main:
                                                 self.num_picoscopes,
                                                 self.channels,
                                                 save_metadata)
-        time.sleep(1)
         processor.start_processing()
 
-    def open_processing(self):
-        parameters, _ = self.gui.collect_parameters()
-        resistor_value = parameters["resistor_value"]
-        num_freqs =  len(parameters["selected_frequencies"].split(","))
+    def open_processing(self) -> None:
+        
+        experiment_parameters, save_metadata = self.gui.collect_parameters()
+
+        resistor_value = experiment_parameters["resistor_value"]
+        num_freqs =  len(experiment_parameters["selected_frequencies"].split(","))
         date_today = datetime.today().strftime("%Y-%m-%d-")
         time_now = datetime.now().strftime("%H%M-%S")
         save_path = date_today + time_now
 
-        counter = 1
+        channel_index_in_file = 1
         current_channels_watch_imp = ""
         voltage_channels_watch_imp = ""
         for picoscope_index in range(self.num_picoscopes):
-            current_channels_watch_imp += "," +str(counter)
-            counter += 1
+            current_channels_watch_imp += "," +str(channel_index_in_file)
+            channel_index_in_file += 1
             for channel_index in range(1,4):
                 if self.channels[picoscope_index,channel_index]:
-                    voltage_channels_watch_imp += ","+str(counter)
-                    counter += 1
+                    voltage_channels_watch_imp += ","+str(channel_index_in_file)
+                    channel_index_in_file += 1
         current_channels_watch_imp = current_channels_watch_imp[1:]
         voltage_channels_watch_imp = voltage_channels_watch_imp[1:]
         print("Current channels used: " + current_channels_watch_imp)
@@ -223,9 +242,10 @@ class EIS_main:
                                                 save_path,
                                                 self.num_picoscopes,
                                                 self.channels,
-                                                parameters)
+                                                save_metadata)
 
-    def open_fitting(self):
+    def open_fitting(self) -> None:
+
         self.gui.log("Opening fitting window")
         fitting_dash.interface()
 

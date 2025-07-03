@@ -219,7 +219,7 @@ class EIS_GUI():
         self.TEXTBOX_FONTSIZE = textbox_font.configure()["size"]
         self.TEXTBOX_FAMILY = textbox_font.configure()["family"]
 
-    def how_to(self):
+    def how_to(self) -> None:
         tk.messagebox.showinfo("How To",
                             "How to use the GUI control panel:\n"+
                             "----------------------------------------------------\n\n"+
@@ -237,7 +237,7 @@ class EIS_GUI():
                             "- Close the windows by using the 'Exit window'-button.",
                             parent=self.root)
 
-    def about(self):
+    def about(self) -> None:
         tk.messagebox.showinfo("About",
                             "Author: Håkon Kvitvik Eckle\n"+
                             "Contact: hakon.eckle@gmail.com\n\n"+
@@ -245,10 +245,10 @@ class EIS_GUI():
                             "The program will be used to help improve fuel cell analyses by simultaneously running a biologic device and multiple picoscopes, and do FFT on the results to get impedance data.",
                             parent=self.root)
     
-    def show_chosen_channels(self, chosen_channels=""):
+    def show_chosen_channels(self, chosen_channels : str = "") -> None:
         tk.messagebox.showinfo("Chosen channels:",chosen_channels,parent=self.root)
 
-    def collect_parameters(self):
+    def collect_parameters(self) -> tuple[dict[str], dict[str,str]]:
         '''
         Initializes the parameters into the corresponding arrays,
         finds the corresponding voltage ranges, calculates the total
@@ -256,7 +256,7 @@ class EIS_GUI():
         be matched.
         '''
 
-        def find_voltage_range(potential):
+        def find_voltage_range(potential: float) -> float:
             """
             Parameters:
             --------
@@ -269,7 +269,6 @@ class EIS_GUI():
             potential range is as small as possible. This ensures maximum
             resolution of the measurements.
             """
-            potential = float(potential)
             if potential > 10.01:           
                 range = 10                  # 10 = +-20V (See picoscope SDK documentation page 83)
             elif potential > 5.01:
@@ -286,11 +285,11 @@ class EIS_GUI():
                 range = 4                   # 4 = +- 100 mV
             return(range)
     
-        current_range = find_voltage_range(self.max_pot_current_channel.get())
-        stack_potential_range = find_voltage_range(self.max_pot_stack_voltage_channel.get())
+        current_range = find_voltage_range(float(self.max_pot_current_channel.get()))
+        stack_potential_range = find_voltage_range(float(self.max_pot_stack_voltage_channel.get()))
+        cell_potential_range = find_voltage_range(float(self.max_pot_cell_voltage_channel.get()))
         """NOTE: 1B and 5B were set to stack potential. Ask about this"""
 
-        cell_potential_range = find_voltage_range(self.max_pot_cell_voltage_channel.get())
  
         experiment_parameters = { 
                         "current_range"         : int(current_range),
@@ -341,7 +340,7 @@ class EIS_GUI():
 
         return experiment_parameters, save_metadata
     
-    def fullscrn(self):
+    def fullscrn(self) -> None:
         '''
         The function to control full screen, and resize text.
         '''
@@ -363,7 +362,7 @@ class EIS_GUI():
         except:
             pass        # Try/Except to get rid of some weird error raised somewhere
 
-    def destroy(self):
+    def destroy(self) -> None:
         '''
         Function to destroy all plots and all windows
         '''
@@ -371,7 +370,7 @@ class EIS_GUI():
         plt.close('all')
         self.root.destroy()
 
-    def log(self, message):
+    def log(self, message : str) -> None:
         """
         Parameters:
         --------
@@ -387,7 +386,6 @@ class EIS_GUI():
         self.messagebox.see(tk.END)
         self.root.update()
 
-    
 if __name__ == "__main__":
     current_directory = os.path.dirname(os.path.abspath(__file__))
     folder_names = ['Save_folder', 'Total_mm', 'Raw_data']

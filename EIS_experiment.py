@@ -27,7 +27,8 @@ class EIS_experiment():
                     low_freq_periods    : float,
                     sleep_time          : float, 
                     time_path           : str,
-                    save_metadata       : dict):
+                    save_metadata       : dict[str, str]
+    ) -> None:
         
         self.start_time = time.time()
         self.admiral_channel = 1
@@ -59,30 +60,27 @@ class EIS_experiment():
         self.admiral_started_event = asyncio.Event()
         self.experiment_complete = asyncio.Event()
 
-    async def perform_experiment(self):
+    async def perform_experiment(self) -> None:
 
-        def device_connected_signal():
+        def device_connected_signal() -> None:
             print("Connection signal received")
 
-        def new_element_signal(stepnumber):
+        def new_element_signal(stepnumber) -> None:
             if stepnumber == 1 or stepnumber > self.num_freqs + 1:
                 print(f"Admiral sleeping for {self.sleep_time} seconds")
             else:
-                try:
-                    print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
-                    handler.pauseExperiment(self.admiral_channel)
-                except Exception as e:
-                    print(e)
+                print(f"Admiral ready to start {self.range_of_freqs[stepnumber-2]}Hz")
+                handler.pauseExperiment(self.admiral_channel)
 
-        def element_paused():
+        def element_paused() -> None:
             self.admiral_ready.set()
 
-        def element_resumed():
+        def element_resumed() -> None:
             for _ in range(self.num_picoscopes):
                 self.admiral_started_sem.release()
             self.admiral_started_event.set()
 
-        def experiment_stopped():
+        def experiment_stopped() -> None:
             print(f"Experiment complete at {time.time() - self.start_time }")
             self.experiment_complete.set()
     
@@ -123,7 +121,7 @@ class EIS_experiment():
             
         await self.pico_setup()     #sets up the picoscope
 
-        async def pico_task():
+        async def pico_task() -> None:
             """
             Coroutine for controlling the Picoscopes
             """
@@ -138,7 +136,7 @@ class EIS_experiment():
                 self.saveData(frequency_index, freq, res)
                 self.results.append(res)      #This is where the sampling happens
 
-        async def admiral_task():
+        async def admiral_task() -> None:
             """
             Coroutine for controlling Admiral instruments
             """
@@ -273,7 +271,7 @@ class EIS_experiment():
         
         return freq_results
 
-    def pico_close(self):
+    def pico_close(self) -> None:
 
         """
         Closing the unit and turning of led to indicate this
@@ -283,7 +281,8 @@ class EIS_experiment():
             ps.ps4000aCloseUnit(self.c_handle[i])
         print(f"Closed picoscopes at {time.time()}")
 
-    def plot(self):
+    def plot(self) -> None:
+
         for frequency_index in range(self.num_freqs):
             periods = find_periods(self.range_of_freqs[frequency_index])               
             for picoscope_index in range(self.num_picoscopes):
@@ -418,24 +417,24 @@ def find_periods(freq : float, low_freq_periods : float) -> float:
         
     return periods
 
-def filter_data(data, freq, fs):
+def filter_data(data : np.ndarray, freq : float, fs : float) -> np.ndarray:
     filtered_data = data
     mean = statistics.mean(data)
     filtered_data = data - mean
     filtered_data = butter_lowpass_filter(filtered_data, [0.25*freq, 4*freq], fs, order=4)
     return filtered_data
  
-def butter_lowpass_filter(data, cutOff, fs, order=4):
+def butter_lowpass_filter(data : np.ndarray,
+                            cutOff : tuple[float, float],
+                            fs : float,
+                            order : int = 4
+) -> np.ndarray:
     nyq = 0.5*fs
     normalCutoff = [cutOff[0] / nyq,  cutOff[1] /nyq]
     b, a = butter(order, normalCutoff, btype='bandpass', analog = False)
     y = lfilter(b, a, data)
     return y
 
-
-"""Notes:
-- Currently saves data *twice* in order to interface with watch impedance. Optimally would just read the correct lines from the saved data, not save it twice
-"""
 
 if __name__ == "__main__":
     channels = np.array([[1,1,1,1],[1,1,1,0]])
