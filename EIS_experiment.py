@@ -245,24 +245,27 @@ class EIS_experiment():
         """
         Opens PicoScopes and sets channels. 
         """
+        try:
+            for picoscope_index in range(self.num_picoscopes):
+                open_unit_status = ps.ps4000aOpenUnit(ctypes.byref(ctypes.c_int16(self.pos[picoscope_index])), None)
+                assert_pico_ok(open_unit_status)
 
-        for picoscope_index in range(self.num_picoscopes):
-            open_unit_status = ps.ps4000aOpenUnit(ctypes.byref(ctypes.c_int16(self.pos[picoscope_index])), None)
-            assert_pico_ok(open_unit_status)
+                flash_led_status = ps.ps4000aFlashLed(self.c_handle[picoscope_index],-1)
+                assert_pico_ok(flash_led_status)       #add delay in order to indentify which unit is which?
+                time.sleep(1)
 
-            flash_led_status = ps.ps4000aFlashLed(self.c_handle[picoscope_index],-1)
-            assert_pico_ok(flash_led_status)       #add delay in order to indentify which unit is which?
-
-            for channel_index in range(4): 
-                if self.channels[picoscope_index, channel_index]:
-                    pico_channel_status = ps.ps4000aSetChannel(self.c_handle[picoscope_index],
-                                        channel_index,
-                                        1,
-                                        1,
-                                        self.experiment_ranges[0 if channel_index == 0 else 2],
-                                        0)
-                    assert_pico_ok(pico_channel_status)
-
+                for channel_index in range(4): 
+                    if self.channels[picoscope_index, channel_index]:
+                        pico_channel_status = ps.ps4000aSetChannel(self.c_handle[picoscope_index],
+                                            channel_index,
+                                            1,
+                                            1,
+                                            self.experiment_ranges[0 if channel_index == 0 else 2],
+                                            0)
+                        assert_pico_ok(pico_channel_status)
+        except Exception as e:
+            print(e)
+            raise(e)
 
         print("PicoScope(s) is(are) ready")
         

@@ -124,8 +124,8 @@ class Data_processor:
         self.nroot.bind("<Escape>", self.quitFullScreen)
 
         # Screen constants
-        self.SCREENX = 1600#1920  # Screen size horizontal [pixels]
-        self.SCREENY = 930#1080  # Screen size vertiacal [pixels]
+        self.SCREENX = 1300#1920  # Screen size horizontal [pixels]
+        self.SCREENY = 755#1080  # Screen size vertiacal [pixels]
         self.FONTSIZE = 16  # Fontsize [pixels]
         self.FONTWIDTH = 8  # Font width [pixels]
         self.FIGL_INCH = 8  # Figure length
@@ -164,6 +164,8 @@ class Data_processor:
         self.select_save_path(save_path)
 
         self.save_time_string = save_path
+
+        self.save_total_mm()
 
     def make_canvases(self) -> None:
         """Creates the Canvases for the interface"""
@@ -694,7 +696,7 @@ class Data_processor:
                             line = data_all[line_index]
                             linesplit = float(line.split("\t")[0])
                             for frequency_index in range(self.num_freqs):
-                                if abs((linesplit-float(range_of_freqs[frequency_index]))/linesplit) < 0.01:
+                                if abs((linesplit-float(range_of_freqs[frequency_index]))/linesplit) < 0.1: # How much do we let the frequency miss by?
                             # Criteria for K-K, that the real residual is less than 10%. For now this function is basically turned off
                             #if abs(res_real[p-1]) < 1:
                                     fil.write(line)

@@ -194,6 +194,8 @@ class EIS_main:
         # Waits for all measurements to be complete and then closes the loops
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
+            #loop.run_until_complete(experiment.pico_setup())
+            #experiment.pico_close()
         app.quit()
         return True
         #experiment.plot()
@@ -237,11 +239,27 @@ class EIS_main:
         experiment_parameters, save_metadata = self.gui.collect_parameters()
 
         resistor_value = experiment_parameters["resistor_value"]
-        num_freqs =  len(experiment_parameters["selected_frequencies"].split(","))
+
+        if self.gui.manual_freq_check.get():
+                    num_freqs =  len(experiment_parameters["selected_frequencies"].split(","))
+        else:
+            max_freq = experiment_parameters["max_frequency"]
+            min_freq = experiment_parameters["min_frequency"]
+            steps_per_decade = experiment_parameters["steps_per_decade"]
+            num_decades = log10(max_freq) - log10(min_freq)
+            num_freqs = int(num_decades) * steps_per_decade
+            range_of_freqs = np.logspace(log10(max_freq), log10(min_freq), num=num_freqs, endpoint=True, base=10)
+            
+            selected_frequencies = ""
+            for frequency in range_of_freqs:
+                selected_frequencies = selected_frequencies + str(frequency) + ","
+            selected_frequencies = selected_frequencies[:-1]
+            save_metadata["selected_frequencies"] = selected_frequencies
+
         date_today = datetime.today().strftime("%Y-%m-%d-")
         time_now = datetime.now().strftime("%H%M-%S")
         save_path = date_today + time_now
-
+        save_path = "2025-07-03-1519-44"
         channel_index_in_file = 1
         current_channels_watch_imp = ""
         voltage_channels_watch_imp = ""
@@ -265,7 +283,7 @@ class EIS_main:
                                                 self.num_picoscopes,
                                                 self.channels,
                                                 save_metadata)
-
+        
     def open_fitting(self) -> None:
 
         self.gui.log("Opening fitting window")

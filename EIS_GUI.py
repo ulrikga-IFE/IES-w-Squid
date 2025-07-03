@@ -88,19 +88,19 @@ class EIS_GUI():
         max_pot_current_channel_label.grid(row=num_picoscopes+5,column=1, sticky='nsew')
         self.max_pot_current_channel = tk.Entry(self.root)
         self.max_pot_current_channel.grid(row=num_picoscopes+5,column=2, sticky='nsew')
-        self.max_pot_current_channel.insert(0,"20")     
+        self.max_pot_current_channel.insert(0,"1")     
                                                     # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
         max_pot_stack_voltage_channel_label = tk.Label(self.root,text="Max stack potential [V]:")
         max_pot_stack_voltage_channel_label.grid(row=num_picoscopes+6,column=1, sticky='nsew')
         self.max_pot_stack_voltage_channel = tk.Entry(self.root)
         self.max_pot_stack_voltage_channel.grid(row=num_picoscopes+6,column=2, sticky='nsew')
-        self.max_pot_stack_voltage_channel.insert(0,"20") # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
+        self.max_pot_stack_voltage_channel.insert(0,"2") # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
 
         max_pot_cell_voltage_channel_label = tk.Label(self.root,text="Max cell potential [V]:")
         max_pot_cell_voltage_channel_label.grid(row=num_picoscopes+7,column=1, sticky='nsew')
         self.max_pot_cell_voltage_channel = tk.Entry(self.root)
         self.max_pot_cell_voltage_channel.grid(row=num_picoscopes+7,column=2, sticky='nsew')
-        self.max_pot_cell_voltage_channel.insert(0,"20")                                            # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
+        self.max_pot_cell_voltage_channel.insert(0,"2")                                            # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
 
         experimental_description_label = tk.Label(self.root,text="Description of experiment:")
         experimental_description_label.grid(row=num_picoscopes+8,column=1, sticky='nsew')
@@ -139,7 +139,7 @@ class EIS_GUI():
         area_label.grid(row=num_picoscopes+14,column=1, sticky='nsew')
         self.area = tk.Entry(self.root)
         self.area.grid(row=num_picoscopes+14,column=2, sticky='nsew')
-        self.area.insert(0,"195")
+        self.area.insert(0,"90")
 
         temperature_label = tk.Label(self.root,text="Temperature (in C):")
         temperature_label.grid(row=num_picoscopes+15,column=1, sticky='nsew')
@@ -157,20 +157,20 @@ class EIS_GUI():
         dc_current_label.grid(row=num_picoscopes+17,column=1, sticky='nsew')
         self.dc_current = tk.Entry(self.root)
         self.dc_current.grid(row=num_picoscopes+17,column=2, sticky='nsew')
-        self.dc_current.insert(0,"1") 
+        self.dc_current.insert(0,"4") 
 
         ac_current_label = tk.Label(self.root,text="AC current (in percent of DC):")
         ac_current_label.grid(row=num_picoscopes+18,column=1, sticky='nsew')
         self.ac_current = tk.Entry(self.root)
         self.ac_current.grid(row=num_picoscopes+18,column=2, sticky='nsew')
-        self.ac_current.insert(0,"0.4")
+        self.ac_current.insert(0,"0.1")
 
 
         sleep_time_label = tk.Label(self.root,text="Sleep time before and afer experiment (seconds):")
         sleep_time_label.grid(row=num_picoscopes+19,column=1, sticky='nsew')
         self.sleep_time = tk.Entry(self.root)
         self.sleep_time.grid(row=num_picoscopes+19,column=2, sticky='nsew')
-        self.sleep_time.insert(0,"10") 
+        self.sleep_time.insert(0,"60") 
 
         shunt_selector_name = tk.Label(self.root,text = "Select shunt:")
         shunt_selector_name.grid(row=num_picoscopes+20,column=1,sticky='nsew')
@@ -185,7 +185,7 @@ class EIS_GUI():
                 ]
 
         self.shunt_value = tk.StringVar(self.root)                                                 # CHANGE THIS STRING TO CHANGE DEFAULT VALUE
-        self.shunt_value.set("200mA/200mV")
+        self.shunt_value.set("25A/60mV")
 
         dropmenu = tk.OptionMenu(self.root, self.shunt_value, *shunt_options)
         dropmenu.grid(row=num_picoscopes+20,column=2,sticky='nsew') 
@@ -207,7 +207,7 @@ class EIS_GUI():
         manual_freq_button = tk.Label(self.root,text="Use manual frequency input")
         manual_freq_button.grid(row=num_picoscopes+24,column=1,sticky='nsew')
         self.manual_freq_check = tk.IntVar()
-        self.manual_freq_check.set(1)
+        self.manual_freq_check.set(0)
         manual_freq = tk.Checkbutton(self.root,variable=self.manual_freq_check, onvalue=1, offvalue=0)
         manual_freq.grid(row=num_picoscopes+24,column=2,sticky='nsew')
         
