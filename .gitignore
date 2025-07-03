@@ -5,3 +5,4 @@ Raw_data/
 test.py
 temp.txt
 __pycache__/
+.mypy_cache/
