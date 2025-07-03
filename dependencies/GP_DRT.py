@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 Functions utilized in by the DRT-fitting in the DRT_fitting.py-file
 

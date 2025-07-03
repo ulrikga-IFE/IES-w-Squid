@@ -95,7 +95,7 @@ class Data_processor:
                     save_path           : str,
                     num_picoscopes      : int, 
                     channels            : np.ndarray[tuple[int, int], bool],
-                    save_metadata       : str,
+                    save_metadata       : dict[str, str],
     ) -> None:
         """
         Set up the interface and its widgets. Calls the nroot.mainloop starting
@@ -243,7 +243,7 @@ class Data_processor:
             "Current proportion",
             "Current correction / Ohm",
         ]
-        # Creating and placing buttons from GUI.py
+        # Creating and placing buttons from GUI_helper.py
         self.inboxes = [
             GUI_helper.InboxPlace(
                 self.nroot,

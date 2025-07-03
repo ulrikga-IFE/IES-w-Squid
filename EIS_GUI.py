@@ -2,7 +2,7 @@ import tkinter as tk
 import tkinter.simpledialog
 import tkinter.font
 import numpy as np
-import ctypes
+from typing import Any
 import matplotlib.pyplot as plt
 import os
 import numpy as np
@@ -248,7 +248,7 @@ class EIS_GUI():
     def show_chosen_channels(self, chosen_channels : str = "") -> None:
         tk.messagebox.showinfo("Chosen channels:",chosen_channels,parent=self.root)
 
-    def collect_parameters(self) -> tuple[dict[str], dict[str,str]]:
+    def collect_parameters(self) -> tuple[dict[str, Any], dict[str, str]]:
         '''
         Initializes the parameters into the corresponding arrays,
         finds the corresponding voltage ranges, calculates the total

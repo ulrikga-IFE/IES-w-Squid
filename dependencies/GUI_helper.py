@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+
 """
 GUI
 
@@ -77,7 +79,7 @@ class InboxPlace:
 
     def __init__(
         self,
-        window: tk.Tk,
+        window: tk.Toplevel,
         text: str,
         x: int,
         y: int,
@@ -362,7 +364,7 @@ class PlotCanvas:
         self,
         window: tk.Tk,
         figsize,
-        dpi: int,
+        dpi: float,
         row: int,
         column: int,
         num_vertical_subplots: int = 1,

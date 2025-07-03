@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 '''
 Short description:
     The code that handles the reaction and main functionality of the Bokeh-plots. 

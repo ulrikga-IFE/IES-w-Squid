@@ -8,8 +8,8 @@ from PySide6.QtWidgets import QApplication
 import sys
 import asyncio
 import qasync
-import time
 from math import log10
+
 
 import EIS_GUI
 import EIS_experiment
@@ -22,12 +22,12 @@ class EIS_main:
         scopes = tk.simpledialog.askstring(title="Picoscopes",prompt="How many picoscopes?")
         self.num_picoscopes = int(float(scopes))
 
-        self.channels = np.zeros((self.num_picoscopes,4), dtype=bool)
+        self.channels = np.zeros((self.num_picoscopes,4), dtype = bool)
         for picoscope_index in range(self.num_picoscopes):
             chn_diag = tk.simpledialog.askstring(title=f"Picoscope {picoscope_index+1}",
                                                     prompt=f"Write answer with 1 for yes, 0 for no, in one number. Ex: 1100 for chA and chB.\nChannels in picoscope {picoscope_index+1}:")
             for channel_index in range(4):
-                self.channels[picoscope_index,channel_index] =bool(float(chn_diag[channel_index]))
+                self.channels[picoscope_index,channel_index] = bool(float(chn_diag[channel_index]))
 
         self.gui = EIS_GUI.EIS_GUI(self.num_picoscopes, self.channels, self.start_and_process_measurements, self.open_fitting, self.open_processing)
         self.gui.root.mainloop()
@@ -53,10 +53,10 @@ class EIS_main:
         # Collecting the correct frequencies depending on inputted settings
         if self.gui.manual_freq_check.get():
             selected_frequencies = experiment_parameters["selected_frequencies"].split(",")
-            range_of_freqs = []
+            temporary_frequencies = []
             for frequency in selected_frequencies:
-                range_of_freqs.append(float(frequency))
-            range_of_freqs = np.array(range_of_freqs)
+                temporary_frequencies.append(float(frequency))
+            range_of_freqs = np.array(temporary_frequencies)
             num_freqs = len(range_of_freqs)
         else:
             max_freq = experiment_parameters["max_frequency"]
@@ -91,7 +91,7 @@ class EIS_main:
             if not os.path.exists(f"Raw_data\\{time_path}"):
                 os.makedirs(f"Raw_data\\{time_path}")
             
-            # Spawns a multiprocess pool object to perform the measurements
+            # Spawns a multiprocessing pool object to perform the measurements
             pool = Pool(processes=1)
             pool.apply_async(self.do_experiment, [self.num_picoscopes,
                                                     self.channels,
@@ -119,15 +119,15 @@ class EIS_main:
     @staticmethod
     def do_experiment(num_picoscopes        : int,
                         channels            : np.ndarray[tuple[int,int], bool],
-                        experiment_ranges   : np.ndarray[int, int],
-                        range_of_freqs      : np.ndarray[int, float],
+                        experiment_ranges   : np.ndarray[tuple[int], int],
+                        range_of_freqs      : np.ndarray[tuple[int], float],
                         bias                : float,
                         amplitude           : float,
                         low_freq_periods    : float,
                         sleep_time          : float, 
                         time_path           : str,
                         save_metadata       : dict
-    ) -> None:
+    ) -> bool:
         """
         Parameters
         ----------
@@ -173,7 +173,7 @@ class EIS_main:
         with loop:
             loop.run_until_complete(experiment.perform_experiment())
         app.quit()
-
+        return True
         #experiment.plot()
 
     def process_data(self,

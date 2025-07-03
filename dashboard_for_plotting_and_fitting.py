@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 '''
 Short description:
     The main code that needs to be run to open the Tkinter-window and the Bokeh-plots.
